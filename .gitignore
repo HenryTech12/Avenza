@@ -17,3 +17,8 @@ reports/
 recordings/
 data/prompts/
 deploy/forge/.env.forge
+
+# Forge credentials: never commit
+team*.yml
+team*.yaml
+*.kubeconfig
