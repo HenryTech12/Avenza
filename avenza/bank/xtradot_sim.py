@@ -219,7 +219,8 @@ def create_sim_app(sim: Simulator | None = None) -> FastAPI:
         sim.refs[ref] = {"nip": nip, "account": account, "kind": kind, "at": sim.now(), "used": False, "name": holder}
         return _ok(
             {
-                "account_name": holder,
+                # The real sandbox returns names in capitals (seen 9 Nov 2026).
+                "account_name": holder.upper(),
                 "account_number": account,
                 "bank_code": nip,
                 "name_enquiry_ref": ref,

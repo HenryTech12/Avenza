@@ -4,6 +4,10 @@
 #   export KUBECONFIG=~/forge/teamXX.yaml
 #   deploy/forge/deploy.sh team07 ghcr.io/<you>/avenza v3
 #
+# No Docker on this machine? Let GitHub Actions build the image
+# (.github/workflows/forge-image.yml), then deploy the tag it prints:
+#   SKIP_BUILD=1 deploy/forge/deploy.sh team07 ghcr.io/<owner>/avenza sha-abc1234
+#
 # Follows the guide: linux/amd64 image (§4.1), tagged releases, the reference
 # manifest shape (§4.2) and the "app" Service on port 80 (§4.3).
 set -euo pipefail
@@ -23,9 +27,14 @@ echo "==> Checking kubectl access for $TEAM"
 kubectl auth can-i create deployments >/dev/null || { echo "kubectl cannot create deployments; check KUBECONFIG" >&2; exit 1; }
 kubectl get secret huawei-gateway >/dev/null 2>&1 || echo "warning: secret huawei-gateway not found; bank and MaaS calls will fail" >&2
 
-echo "==> Building $IMAGE:$TAG for linux/amd64"
-docker build --platform linux/amd64 -t "$IMAGE:$TAG" "$ROOT"
-docker push "$IMAGE:$TAG"
+if [[ "${SKIP_BUILD:-0}" == "1" ]]; then
+  echo "==> Skipping build: deploying the existing image $IMAGE:$TAG"
+else
+  command -v docker >/dev/null || { echo "docker not found. Install Docker, or use SKIP_BUILD=1 with an image built by GitHub Actions." >&2; exit 1; }
+  echo "==> Building $IMAGE:$TAG for linux/amd64"
+  docker build --platform linux/amd64 -t "$IMAGE:$TAG" "$ROOT"
+  docker push "$IMAGE:$TAG"
+fi
 
 if [[ -f "$HERE/.env.forge" ]]; then
   echo "==> Updating secret avenza-secrets from deploy/forge/.env.forge"
@@ -35,8 +44,15 @@ else
   echo "warning: deploy/forge/.env.forge not found; speech keys and ADMIN_TOKEN will be missing" >&2
 fi
 
+# A private image needs the regcred pull secret (guide §4.1). Use it if present.
+PULL_SECRET=()
+if kubectl get secret regcred >/dev/null 2>&1; then
+  echo "==> Using pull secret regcred"
+  PULL_SECRET=(-e "s|# imagePullSecrets: \[{ name: regcred }\]|imagePullSecrets: [{ name: regcred }]|")
+fi
+
 echo "==> Applying manifest"
-sed -e "s#teamXX#${TEAM}#g" -e "s#IMAGE#${IMAGE}:${TAG}#g" "$HERE/app.yaml" | kubectl apply -f -
+sed "${PULL_SECRET[@]}" -e "s#teamXX#${TEAM}#g" -e "s#IMAGE#${IMAGE}:${TAG}#g" "$HERE/app.yaml" | kubectl apply -f -
 kubectl rollout restart deployment/app >/dev/null 2>&1 || true
 kubectl rollout status deployment/app --timeout=180s
 

@@ -47,7 +47,11 @@ async def main(send: bool) -> int:
         balance = await bank.get_balance(source)
         report(f"balance {source}", format_naira(balance.get("available_kobo") or 0))
         info = await bank.name_enquiry("000014", "0987654321")
-        report("intra name enquiry 0987654321", info.account_name, info.account_name == "Ngozi Adaobi Eze")
+        report(
+            "intra name enquiry 0987654321",
+            info.account_name,
+            info.account_name.casefold() == "ngozi adaobi eze",
+        )
         info = await bank.name_enquiry("058", "0123987001")
         report("interbank name enquiry GTBank 0123987001", info.account_name)
         try:

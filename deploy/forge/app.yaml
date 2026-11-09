@@ -9,16 +9,24 @@
 # Quota (§7.1): namespace requests 400m CPU / 768Mi, limits 2 cores / 2Gi,
 # 1 PersistentVolume up to 10Gi. This uses 150m / 256Mi, leaving room for a
 # debugging pod.
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: avenza-data
-spec:
-  accessModes: ["ReadWriteOnce"]
-  resources:
-    requests:
-      storage: 1Gi
+# Persistent volume: OFF for now. On 9 Nov 2026 volume creation failed on the
+# platform ("Cannot create a new Volume with an outstanding balance on your
+# account", Linode). Until the organisers fix it, /data is an emptyDir: the
+# SQLite database (enrolled devices, Avenza's transfer records) is wiped when
+# the pod restarts or a new image is deployed. The bank keeps its own records.
+# To turn persistence back on: uncomment this block and switch the "data"
+# volume below back to the persistentVolumeClaim.
+#
+# ---
+# apiVersion: v1
+# kind: PersistentVolumeClaim
+# metadata:
+#   name: avenza-data
+# spec:
+#   accessModes: ["ReadWriteOnce"]
+#   resources:
+#     requests:
+#       storage: 10Gi   # Linode block storage minimum is 10Gi
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -112,8 +120,9 @@ spec:
               mountPath: /data
       volumes:
         - name: data
-          persistentVolumeClaim:
-            claimName: avenza-data
+          emptyDir: {}
+          # persistentVolumeClaim:
+          #   claimName: avenza-data
 ---
 apiVersion: v1
 kind: Service

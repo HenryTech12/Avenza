@@ -553,3 +553,13 @@ def test_simulator_idempotency_replay_and_conflict():
         changed = client.post("/v1/transfers/intra", json={**body, "amount": 1001.0}, headers=key)
         assert changed.status_code == 409
         assert client.get("/v1/banks", headers={"x-api-key": "nope"}).status_code == 401
+
+
+def test_bank_capitals_become_spoken_names():
+    from avenza.bank.sandbox import display_name
+
+    assert display_name("NGOZI ADAOBI EZE") == "Ngozi Adaobi Eze"
+    assert display_name("MAMA NKECHI PROVISIONS LTD") == "Mama Nkechi Provisions Ltd"
+    assert display_name("TAMUNOTONYE  BRIGGS") == "Tamunotonye Briggs"
+    assert display_name("Iya Bisi Foods") == "Iya Bisi Foods"  # mixed case untouched
+    assert display_name("O'NEIL-ADEYEMI") == "O'Neil-Adeyemi"

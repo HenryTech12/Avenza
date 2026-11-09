@@ -140,6 +140,18 @@ def _naira(kobo: int) -> float:
     return round(kobo / 100, 2)
 
 
+def display_name(name: str) -> str:
+    """Bank names arrive in capitals ("NGOZI ADAOBI EZE"). Speak them as names.
+
+    Some text-to-speech engines spell out all-caps words letter by letter, so
+    the read-back uses "Ngozi Adaobi Eze". Mixed-case names are left alone.
+    """
+    name = " ".join((name or "").split())
+    if not name or name != name.upper():
+        return name
+    return " ".join(part[:1].upper() + part[1:].lower() if part.isalpha() else part.title() for part in name.split())
+
+
 def _same_name(a: str, b: str) -> bool:
     def fold(text: str) -> str:
         text = unicodedata.normalize("NFKD", text or "")
@@ -329,7 +341,7 @@ class XtradotBank(BankAdapter):
         ref = str(_first(data, "name_enquiry_ref", "reference", "session_id", default="")).strip()
         if not name:
             raise BankNotFound("sandbox returned no account name")
-        return name, ref
+        return display_name(name), ref
 
     async def name_enquiry(self, bank_code: str, account_number: str) -> AccountInfo:
         nip = await self._nip(bank_code)
