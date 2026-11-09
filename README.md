@@ -1,0 +1,357 @@
+# Avenza — voice banking layer
+
+Avenza is a working prototype of a voice-first transfer flow with one rule:
+
+> **Voice only drafts a transfer. Only a customer fingerprint, verified by the
+> backend, may move money.**
+
+Avenza holds no funds, runs no KYC, and does not settle payments. It sits in
+front of a bank adapter. The included bank is a local simulation that moves no
+real money and is labelled as simulated everywhere it appears.
+
+---
+
+## What this build actually is
+
+| Area | Status |
+| --- | --- |
+| Transfer state machine | **Working.** Every transition is checked in code. Voice alone can never reach `APPROVED`. |
+| Amount / account / bank parser | **Working and deterministic.** Digits, spoken English, mixed-language number words, 15 vs 50, whole-kobo amounts. |
+| WebAuthn fingerprint approval | **Working.** Real registration and assertion verification with the `webauthn` library; replay, expiry and field tampering are rejected. Proven by tests with a software authenticator. |
+| Idempotency / exactly-once | **Working against the mock bank.** Unique idempotency key, status check before retry, duplicate replies settle once. A background reconciler resolves unknown outcomes even after the customer disconnects. |
+| Reconnects | **Working.** Transfers belong to the customer, not the socket: a reconnect resumes the read-back, the fingerprint request or the bank status. One transfer in flight per customer. |
+| Risk warnings | **Working.** Repeat-payment, new-recipient/large-amount and name-mismatch warnings are spoken before the read-back. |
+| Latency logging | **Working.** Per-stage timings in `reports/latency.jsonl`; `python scripts/latency_report.py` prints median and p90. |
+| Hash-chained audit log | **Working.** Tamper, deletion and broken links are detected by `/audit/verify`. |
+| WebSocket + PWA client | **Working.** Installable PWA, mic capture, VAD, read-back, fingerprint approval, typed-text fallback. |
+| Bank | **Simulated** by default (`BANK_MODE=mock`). `BANK_MODE=sandbox` uses the **Xtradot Bank sandbox** (Forge 2026 guide §5): name-enquiry refs, intra/interbank, idempotency, never-resend on timeout, requery, charges, reversals, signed webhooks, history, receipts and balance. Tested end to end against a local simulator built from the guide; run `scripts/sandbox_smoke.py` in the cluster to confirm against the real sandbox. All data is synthetic. |
+| Deployment | **Ready for the Forge cluster**: `deploy/forge/` (manifest, deploy script) and `docs/FORGE.md`. Huawei MaaS (`glm-5.2`) for the LLM fallback. |
+| Speech-to-text | **Simulated** by default: the browser's speech recognition or typed text supplies the transcript. With `STT_PROVIDER=ai`, audio streams live to Deepgram/YarnGPT/Sahara with partial transcripts and a batch fallback. Not yet tested against live accounts. |
+| Text-to-speech | **Simulated** by default: the browser speaks the prompts. With `TTS_PROVIDER=yarngpt` (or `yarn`), every prompt including the read-back is synthesised server-side, cached, and sent inside `prompt.play`; the device voice is the fallback. Not yet tested against a live account. |
+| AI/ML layer | **Integrated.** The vendored `avenza_ai` package adds hybrid intent (keyword + optional Llama), a deterministic amount cross-check, AI read-backs, richer history phrases, streaming STT and YarnGPT TTS. It cannot approve a transfer. |
+| Yorùbá / Hausa / Igbo / Pidgin | **Unverified translations.** Only English is claimed as checked. |
+| KYC, holding funds, settlement, real bank | **Not implemented.** Out of scope for this design. |
+
+The source specification is a design document. This repository implements the
+parts that can be built and tested without a real bank, real provider
+credentials, or a native-speaker language test. It does not pretend otherwise.
+
+---
+
+## Quick start
+
+Requires Python 3.11+ (developed on 3.14).
+
+```powershell
+python -m pip install -r requirements.txt
+python run.py
+```
+
+Open <http://localhost:8000>. The default database is SQLite (`avenza.db`), the
+bank is the local mock, and the PWA is served from the same origin.
+
+For a real fingerprint approval:
+
+1. Enter a display name.
+2. Tick the consent box.
+3. Click **Record consent and enrol fingerprint**.
+4. Accept the browser's passkey prompt (Windows Hello, Touch ID, Android
+   fingerprint, etc.).
+5. Click **Start listening**, then say or type:
+   `Send five thousand naira to GTBank account 0123456789`.
+6. Listen to the read-back and say **yes**.
+7. Approve the exact payment with your fingerprint.
+
+`localhost` is a secure context, so this works without HTTPS. A phone on the LAN
+needs HTTPS; see [Phone testing](#phone-testing).
+
+### Demo without a fingerprint sensor
+
+For a quick UI demo only:
+
+```powershell
+$env:ALLOW_DEV_APPROVAL = "true"
+python run.py
+```
+
+The PWA then shows **Dev enrolment (no fingerprint)** and **Simulate
+fingerprint (dev)**. These are gated: they are refused when `APP_ENV=production`
+and are never enabled in the Docker compose file. See
+[SECURITY.md](docs/SECURITY.md).
+
+### Tests
+
+```powershell
+python -m pytest -q
+```
+
+The suite covers the parser, state machine, transfers (double tap, repeated
+command, lost reply, timeout then retry, exactly one payment), WebAuthn approval
+(no approval / expired / replayed / modified / wrong device), audit tampering,
+the orchestrator, REST and WebSocket behaviour, the AI/ML package and its
+integration. It uses an in-memory SQLite database and a software authenticator;
+no network or hardware is required. Current count: **415 tests**.
+
+---
+
+## Architecture
+
+```
+┌──────────────────────────── PWA (web/) ────────────────────────────┐
+│  mic → energy VAD → 16 kHz mono PCM ─┐                             │
+│  browser SpeechRecognition ──────────┤                             │
+│  typed text (demo fallback) ─────────┤                             │
+│  WebAuthn create()/get() ────────────┼── fingerprint assertion     │
+└──────────────────────────────────────┼─────────────────────────────┘
+                                       │ WebSocket /ws
+┌──────────────────────────────────────▼─────────────────────────────┐
+│ FastAPI                                                            │
+│  ws.py          session + utterance protocol                       │
+│  orchestrator   turn handling, field collection, read-back         │
+│  intent.py      deterministic keywords; optional LLM (intent only) │
+│  ai/            bridge to the vendored AI/ML package               │
+│  parser.py      amount / account / bank / time (authoritative)     │
+│  services/      transfers, devices, sessions                       │
+│  security.py    WebAuthn registration + approval + unlock          │
+│  bank/          BankAdapter → MockBank or SandboxBank              │
+│  audit.py       SHA-256 hash chain                                 │
+│  avenza_ai/     vendored AI/ML: intent, speech, read-back, eval     │
+└──────────────────────────────────────┬─────────────────────────────┘
+                                       │
+                          SQLite / PostgreSQL (SQLAlchemy 2)
+```
+
+The LLM, when enabled, may only classify intent. It never produces an amount.
+Amounts always come from the deterministic parser.
+
+---
+
+## The transfer state machine
+
+```
+DRAFTED → READBACK_PLAYED → CONFIRMED_BY_VOICE → AWAITING_BIOMETRIC
+        → APPROVED → SUBMITTED → SETTLED
+                                  ↘ FAILED
+                                  ↘ PENDING_UNKNOWN → SETTLED | FAILED
+
+CANCELLED and EXPIRED are reachable only before submission.
+```
+
+Rules enforced in `avenza/state_machine.py` and at the service boundary:
+
+- Only code transitions states. No timer or silence advances one.
+- `APPROVED` is reachable only from `AWAITING_BIOMETRIC`, and only after a
+  verified WebAuthn assertion.
+- `SUBMITTED` is reachable only from `APPROVED`.
+- `SUBMITTED` cannot be cancelled.
+- Drafts expire. A payment that has not been submitted expires without moving
+  money.
+- A timeout never triggers a blind retry: the service checks status first.
+
+Money is stored as an integer number of kobo. No floats. No PINs, card numbers,
+or funds are stored.
+
+---
+
+## Configuration
+
+Copy `.env.example` to `.env` and edit. The important switches:
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `DATABASE_URL` | `sqlite:///./avenza.db` | SQLite out of the box; `postgresql+psycopg://...` for Postgres. |
+| `BANK_MODE` | `mock` | `mock` = local simulation, `sandbox` = organiser adapter with placeholder endpoints. |
+| `STT_PROVIDER` | `mock` | `mock`, `deepgram`, `yarn`, `sahara`. |
+| `TTS_PROVIDER` | `mock` | `mock` (browser speech) or `yarn`. |
+| `ALLOW_TEXT_UTTERANCE` | `true` | Allows typed/browser-recognition text in the demo. |
+| `AI_ENABLED` | `true` | Master switch for the integrated AI/ML layer. |
+| `AI_INTENT_ENABLED` | `true` | Hybrid AI intent for paraphrases the keyword layer misses. |
+| `AI_AMOUNT_CROSSCHECK` | `false` | Ask again if the AI parser disagrees; never replaces the backend amount. |
+| `AI_READBACK` | `false` | Use the AI read-back template. |
+| `AI_HISTORY` | `true` | Use AI time phrases for history. |
+| `AI_LANGUAGES` | `en` | Languages enabled for number/intent words. Only `en` is verified. |
+| `STT_PROVIDER` = `ai` | `mock` | Use the AI streaming STT registry (falls back to mock without keys). |
+| `TTS_PROVIDER` = `ai` | `mock` | Use YarnGPT TTS through the AI package. |
+| `WEBAUTHN_RP_ID` | `localhost` | Registrable domain; must match the browser URL. |
+| `WEBAUTHN_ORIGIN` | `http://localhost:8000` | Exact scheme + host + port. |
+| `MAX_AMOUNT_KOBO` | `100000000` | ₦1,000,000 default cap. |
+| `NEW_RECIPIENT_HOLD_S` | `10` | Safety pause before fingerprint for a large new recipient. |
+| `DRAFT_TTL_S` | `120` | Draft lifetime. |
+| `APPROVAL_TTL_S` | `60` | WebAuthn challenge lifetime. |
+| `DEV_TOOLS` | `true` | Dev endpoints and demo accounts. Refused in production. |
+| `ALLOW_DEV_APPROVAL` | `false` | Test/demo bypass. **Never enable in production.** |
+| `ADMIN_TOKEN` | empty | When set, `/audit/*` and `/dev/*` require `X-Admin-Token`. |
+
+`APP_ENV=production` disables dev enrolment, the dev approval bypass, permissive
+CORS, and unauthenticated admin access. It does not by itself make the bank real.
+
+---
+
+## API at a glance
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/health` | Liveness, bank/STT/TTS/AI mode, limits, WebAuthn config. |
+| `GET` | `/config` | Public demo config and mock accounts. |
+| `GET` | `/ai/status` | AI/ML switches and the amount/approval authority statement. |
+| `POST` | `/devices/register/options` | Start WebAuthn enrolment. |
+| `POST` | `/devices/register/verify` | Verify attestation, return device token once. |
+| `POST` | `/consents` | Record consent (device token required). |
+| `GET` | `/me` | Current customer and device. |
+| `GET` | `/transfers` | History for a date range. |
+| `GET` | `/transfers/{id}` | One transfer, masked account number. |
+| `GET` | `/transfers/{id}/receipt` | Bank receipt (mock or sandbox). |
+| `POST` | `/locks` | Emergency lock. |
+| `POST` | `/locks/options` | WebAuthn unlock challenge. |
+| `POST` | `/locks/unlock` | Verify fingerprint and unlock. |
+| `GET` | `/audit/verify` | Verify the hash chain. |
+| `GET` | `/audit/recent` | Recent audit entries. |
+| `WS` | `/ws` | Voice session protocol. |
+
+Full message shapes, event ordering and error codes are in
+[PROTOCOL.md](docs/PROTOCOL.md).
+
+---
+
+## Security in one page
+
+- A WebSocket device token identifies a session. It **cannot** approve a
+  payment. Only a WebAuthn assertion can.
+- The approval challenge is rebuilt on the server from the stored transfer
+  (amount, bank, account, recipient, nonce). Changing any stored field after the
+  challenge is issued makes verification fail.
+- Challenges are single-use, expire, and are bound to the credential.
+- Three failed fingerprint reads cancel the draft.
+- The audit log is a SHA-256 chain. Editing, deleting or reordering rows is
+  detected.
+- The mock bank deduplicates on the idempotency key, and the service checks
+  status before retrying a timeout.
+
+The full threat model, deployment checklist and known gaps are in
+[SECURITY.md](docs/SECURITY.md).
+
+---
+
+## Docker and PostgreSQL
+
+```powershell
+docker compose up --build
+```
+
+Open <http://localhost:8000>. The compose file uses PostgreSQL 16, the mock bank,
+and `ALLOW_DEV_APPROVAL=false`. Set `ADMIN_TOKEN` in `docker-compose.yml` before
+sharing a demo instance.
+
+To use Postgres without Docker, set:
+
+```
+DATABASE_URL=postgresql+psycopg://avenza:avenza@localhost:5432/avenza
+```
+
+Tables are created on startup. There are no migrations in this prototype.
+
+---
+
+## Phone testing (HTTPS)
+
+WebAuthn needs a secure context. `localhost` counts; a LAN IP does not.
+
+```powershell
+python scripts/make_cert.py
+$env:WEBAUTHN_ORIGIN = "https://192.168.1.20:8000"   # your LAN IP
+python run.py --host 0.0.0.0 --https
+```
+
+Open the `https://...` URL on the phone, accept the development certificate
+warning, then reload. The origin in `.env` must exactly match the URL in the
+address bar, including port. The generated certificate covers `localhost`,
+loopback and the machine's current LAN addresses.
+
+---
+
+## Prompt audio
+
+Prompts are text-first and the PWA speaks them with the browser voice. To serve
+fixed WAV files instead:
+
+```powershell
+python scripts/make_prompts.py          # English only
+python scripts/make_prompts.py --force
+```
+
+The generator uses System.Speech on Windows, `say` on macOS, or `espeak-ng` on
+Linux. Files are written to `web/prompts/` and picked up automatically. Non-
+English prompts require `--allow-unverified`.
+
+---
+
+## Demo data
+
+```powershell
+python scripts/seed.py
+```
+
+| Bank | Account | Name |
+| --- | --- | --- |
+| GTBank | `0123456789` | Aisha Bello |
+| GTBank | `0987654321` | Aisha Bello-Okafor |
+| Access Bank | `1111222333` | Chinedu Okafor |
+| Zenith Bank | `5555666777` | Fatima Yusuf |
+| Kuda | `9999000011` | Muiz Adeyemi |
+| First Bank | `2222333344` | Ngozi Eze |
+| OPay | `3333444455` | Tunde Bakare |
+| Moniepoint | `4444555566` | Zainab Musa |
+
+A step-by-step script, including failure-mode demos, is in
+[DEMO.md](docs/DEMO.md).
+
+---
+
+## Project layout
+
+```
+avenza/
+  main.py          FastAPI app, REST routes, static PWA
+  ws.py            WebSocket protocol
+  orchestrator.py  turn flow, field collection, read-back, approval
+  parser.py        deterministic amount/account/bank/time parser
+  intent.py        keyword intent + optional LLM classifier
+  ai/              bridge to the vendored AI/ML package
+  state_machine.py transfer states and allowed transitions
+  security.py      WebAuthn registration/approval/unlock
+  audit.py         hash-chained audit log
+  models.py        SQLAlchemy models
+  bank/            adapter, mock ledger, sandbox placeholder
+  providers/       STT/TTS interfaces and adapters
+  services/        transfers, devices, sessions
+avenza_ai/         vendored AI/ML layer (intent, parsing, speech, eval)
+data/              language-test manifest used by the AI evaluation tools
+web/               installable PWA (HTML/CSS/JS, service worker, icons)
+scripts/           cert, prompt audio, seed, icons, AI demo
+tests/             pytest suite + software WebAuthn authenticator + tests/ai
+docs/              protocol, security, demo, AI integration, docs/ai
+```
+
+---
+
+## Limitations
+
+- No real bank, no settlement, no funds, no KYC, no card or PIN handling.
+- The sandbox adapter is a placeholder; endpoints must be confirmed with the
+  provider before use.
+- Live STT/TTS adapters are not verified against provider accounts.
+- The AI/ML layer is built and unit-tested on mocks. It has not been run
+  against live providers, real audio or real users. Non-English number words and
+  prompts still need a native-speaker review and the language test.
+- Non-English prompts are unverified translations and the UI says so.
+- SQLite is the default. Postgres is supported and used by Docker, but there is
+  no migration tooling.
+- The audit chain is tamper-evident, not tamper-proof: someone with direct
+  database access can rewrite the whole chain. Ship the head hash elsewhere for
+  stronger guarantees.
+- This is a prototype, not a licensed financial product.
+
+## Licence
+
+No licence is granted for production financial use. Use for evaluation,
+research and demonstration.
