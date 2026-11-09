@@ -122,6 +122,30 @@ class AILiveStream(STTStream):
         )
 
 
+_STT_NAMES = {"deepgram", "yarngpt", "sahara"}
+
+
+def _choice_from_settings(settings: Settings) -> ProviderChoice:
+    """AI_STT_CHOICE ("en=sahara,pcm=sahara") wins over the language-test file.
+
+    Lets the team pick a provider per language on the cluster, where the
+    language-test output (reports/provider_choice.json) is not in the image.
+    """
+    raw = settings.ai_stt_choice
+    if not raw:
+        return ProviderChoice.load(settings.ai_provider_choice)
+    choice: dict[str, str] = {}
+    for item in raw.split(","):
+        if "=" not in item:
+            continue
+        language, provider = (part.strip().lower() for part in item.split("=", 1))
+        if language and provider in _STT_NAMES:
+            choice[language] = provider
+    if not choice:
+        raise ProviderNotConfigured(f"AI_STT_CHOICE has no valid entries: {raw!r}")
+    return ProviderChoice(choice, list(choice))
+
+
 class AIWebSocketSTT(STTProvider):
     """Language-aware streaming STT from the AI provider registry."""
 
@@ -130,7 +154,7 @@ class AIWebSocketSTT(STTProvider):
 
     def __init__(self, settings: Settings):
         self.settings = settings
-        self.choice = ProviderChoice.load(settings.ai_provider_choice)
+        self.choice = _choice_from_settings(settings)
         self.default_language = settings.ai_default_language
         self.factories = {
             "deepgram": lambda: DeepgramSTTProvider(

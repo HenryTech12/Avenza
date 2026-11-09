@@ -114,6 +114,9 @@ class Settings:
     ai_languages: str = "en"
     ai_default_language: str = "en"
     ai_provider_choice: str = "reports/provider_choice.json"
+    # Per-language speech-to-text provider, e.g. "en=sahara,pcm=sahara". Overrides
+    # the language-test file. Only the languages listed are offered.
+    ai_stt_choice: str = ""
     ai_stt_timeout_s: float = 8.0
     stt_streaming: bool = True
 
@@ -245,6 +248,7 @@ def load_settings() -> Settings:
         ai_languages=os.getenv("AI_LANGUAGES", "en"),
         ai_default_language=os.getenv("AI_DEFAULT_LANGUAGE", "en"),
         ai_provider_choice=os.getenv("AI_PROVIDER_CHOICE", "reports/provider_choice.json"),
+        ai_stt_choice=os.getenv("AI_STT_CHOICE", "").strip(),
         ai_stt_timeout_s=_float("AI_STT_TIMEOUT_S", 8.0),
         stt_streaming=_bool("STT_STREAMING", True),
         reconcile_interval_s=_float("RECONCILE_INTERVAL_S", 5.0),

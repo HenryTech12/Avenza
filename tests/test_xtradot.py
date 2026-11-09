@@ -563,3 +563,19 @@ def test_bank_capitals_become_spoken_names():
     assert display_name("TAMUNOTONYE  BRIGGS") == "Tamunotonye Briggs"
     assert display_name("Iya Bisi Foods") == "Iya Bisi Foods"  # mixed case untouched
     assert display_name("O'NEIL-ADEYEMI") == "O'Neil-Adeyemi"
+
+
+def test_stt_choice_per_language_from_settings():
+    from avenza.providers.ai_speech import AIWebSocketSTT
+
+    settings = Settings().for_test(
+        stt_provider="ai",
+        ai_stt_choice="en=sahara, pcm=sahara, yo=yarngpt, xx=nobody",
+        sahara_asr_url="wss://sahara.example/asr",
+        sahara_api_key="k",
+    )
+    stt = AIWebSocketSTT(settings)
+    assert stt.name == "ai:sahara"
+    assert stt._provider_for("pcm")[1].name == "sahara"
+    assert stt._provider_for("yo")[1].name == "yarngpt"
+    assert stt._provider_for("ig")[0] == "en"  # not listed: falls back to the default language
