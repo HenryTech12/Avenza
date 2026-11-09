@@ -204,9 +204,74 @@ class _GenericWSProvider(WebSocketSTTProvider):
         return [TranscriptEvent(text, bool(final), body.get("confidence"))]
 
 
+YARNGPT_BASE_URL = "https://api.yarngpt.ai"
+
+
 class YarnGPTSTTProvider(_GenericWSProvider):
+    """YarnGPT live transcription (API v1, "Live transcription (streaming)").
+
+    Protocol, from the YarnGPT docs:
+    - WebSocket ``wss://api.yarngpt.ai/api/v1/asr/stream``, no query parameters,
+      key as ``Authorization: Bearer`` in the handshake.
+    - First a text ``start`` message declaring pcm_s16le mono audio and its rate,
+      then binary PCM at real-time pace (max 2x after a 5 s allowance, at most
+      65,536 bytes per message), then ``{"type":"finalize"}``.
+    - Replies: ``status``, ``started``, ``partial`` (may change), ``final``
+      (fixed), ``done``, or a single ``error``. The transcript is every final's
+      text in segment order. There is no language hint and no confidence.
+    """
+
     name = "yarngpt"
     prefix = "YARNGPT"
+    cumulative_finals = False
+    # 5 s may be sent at once, then at most twice real time (with a margin).
+    pace = (4.0, 1.8)
+
+    def __init__(self, url: Optional[str] = None, api_key: Optional[str] = None,
+                 languages: Optional[Dict[str, str]] = None, endpoint_silence_ms: int = 500):
+        base = os.getenv("YARNGPT_BASE_URL", YARNGPT_BASE_URL).rstrip("/")
+        default_url = base.replace("https://", "wss://").replace("http://", "ws://") + "/api/v1/asr/stream"
+        super().__init__(url=url or os.getenv("YARNGPT_ASR_WS_URL") or default_url,
+                         api_key=api_key, languages=languages)
+        self.endpoint_silence_ms = max(200, min(3000, endpoint_silence_ms))
+
+    def is_configured(self) -> bool:
+        return bool(self._url and self._key)
+
+    def supports(self, language: str) -> bool:
+        return True  # no language parameter: the model covers its own language list
+
+    def url(self, language: str, sample_rate: int) -> str:
+        return self._url  # "There are no query parameters"
+
+    def start_message(self, language: str, sample_rate: int) -> Optional[str]:
+        return json.dumps({
+            "type": "start",
+            "audio": {"encoding": "pcm_s16le", "sample_rate": int(sample_rate), "channels": 1},
+            "options": {"endpoint_silence_ms": self.endpoint_silence_ms, "partials": True},
+        })
+
+    def end_message(self) -> Optional[str]:
+        return json.dumps({"type": "finalize"})
+
+    def parse_message(self, raw: str) -> List[TranscriptEvent]:
+        try:
+            msg = json.loads(raw)
+        except json.JSONDecodeError:
+            return []
+        if not isinstance(msg, dict):
+            return []
+        kind = msg.get("type")
+        if kind == "error":
+            err = msg.get("error") if isinstance(msg.get("error"), dict) else {}
+            raise ProviderError(
+                f"yarngpt asr: {err.get('code', 'ERROR')} {err.get('message', '')} trace={err.get('trace_id', '-')}"
+            )
+        if kind in ("partial", "final"):
+            text = str(msg.get("text") or "").strip()
+            if text:
+                return [TranscriptEvent(text, kind == "final", None)]
+        return []  # status, started, done, translation, and unknown types
 
 
 class SaharaSTTProvider(_GenericWSProvider):

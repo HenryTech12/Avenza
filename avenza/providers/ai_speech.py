@@ -253,8 +253,14 @@ class AIYarnTTS(TTSProvider):
         start = time.perf_counter()
         try:
             result = await self.tts.synthesize(text, voice or None, language)
-        except (NotConfigured, ProviderError):
+        except (NotConfigured, ProviderError) as exc:
+            # The client falls back to the device voice; say why in the logs.
+            logger.warning("tts failed: %s", exc)
             return AudioResult(b"", 24000, self.name, text=text, simulated=False)
+
+    @property
+    def last_error(self) -> str | None:
+        return getattr(self.tts, "last_error", None)
         elapsed = int((time.perf_counter() - start) * 1000)
         return AudioResult(
             result.pcm,

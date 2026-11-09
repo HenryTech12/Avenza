@@ -133,16 +133,75 @@ def test_connection_failure_is_a_provider_error():
         run(p.transcribe(PCM, "en", 16000, timeout=5))
 
 
-# ---- YarnGPT / Sahara scaffolds -------------------------------------------------------
-def test_scaffold_providers_are_not_configured_until_url_is_set(monkeypatch):
-    for k in ("YARNGPT_ASR_WS_URL", "SAHARA_ASR_WS_URL"):
+# ---- YarnGPT live ASR (documented protocol) / Sahara scaffold ----------------------
+def test_providers_need_url_and_key(monkeypatch):
+    for k in ("YARNGPT_ASR_WS_URL", "SAHARA_ASR_WS_URL", "YARNGPT_API_KEY", "SAHARA_API_KEY"):
         monkeypatch.delenv(k, raising=False)
-    assert not YarnGPTSTTProvider().is_configured() and not SaharaSTTProvider().is_configured()
-    assert YarnGPTSTTProvider(url="wss://x.test/asr").is_configured()
+    assert not SaharaSTTProvider().is_configured()
+    assert not YarnGPTSTTProvider().is_configured()  # default URL, but no key
+    assert YarnGPTSTTProvider(api_key="k").url("en", 16000) == "wss://api.yarngpt.ai/api/v1/asr/stream"
+    assert YarnGPTSTTProvider(api_key="k").is_configured()
 
 
-def test_scaffold_parse_tolerates_common_shapes():
-    p = YarnGPTSTTProvider(url="wss://x.test/asr")
+def test_yarngpt_asr_messages_follow_the_docs():
+    p = YarnGPTSTTProvider(url="wss://x.test/api/v1/asr/stream", api_key="k")
+    start = json.loads(p.start_message("en", 16000))
+    assert start == {
+        "type": "start",
+        "audio": {"encoding": "pcm_s16le", "sample_rate": 16000, "channels": 1},
+        "options": {"endpoint_silence_ms": 500, "partials": True},
+    }
+    assert json.loads(p.end_message()) == {"type": "finalize"}
+    assert p.url("yo", 16000) == "wss://x.test/api/v1/asr/stream"  # no query parameters
+    assert p.headers() == {"Authorization": "Bearer k"}
+    assert p.parse_message(json.dumps({"type": "partial", "segment": 0, "text": "send five"}))[0].is_final is False
+    assert p.parse_message(json.dumps({"type": "final", "segment": 0, "text": "send five thousand"}))[0].is_final
+    for ignored in ("status", "started", "done", "translation", "something_new"):
+        assert p.parse_message(json.dumps({"type": ignored})) == []
+    with pytest.raises(ProviderError, match="RATE_LIMITED"):
+        p.parse_message(json.dumps({"type": "error", "error": {"code": "RATE_LIMITED", "message": "x"}}))
+
+
+def test_yarngpt_asr_stream_against_a_documented_server():
+    from websockets.asyncio.server import serve
+
+    seen = {"audio": 0}
+
+    async def handler(ws):
+        seen["auth"] = ws.request.headers.get("Authorization")
+        seen["path"] = ws.request.path
+        start = json.loads(await ws.recv())
+        seen["start"] = start
+        await ws.send(json.dumps({"type": "status", "state": "connecting"}))
+        await ws.send(json.dumps({"type": "started", "stream_id": "s1", "limits": {}}))
+        async for msg in ws:
+            if isinstance(msg, bytes):
+                seen["audio"] += len(msg)
+                if seen["audio"] == 3200:
+                    await ws.send(json.dumps({"type": "partial", "segment": 0, "text": "send five"}))
+            elif json.loads(msg)["type"] == "finalize":
+                await ws.send(json.dumps({"type": "final", "segment": 0, "text": "send five thousand naira",
+                                          "start_seconds": 0, "end_seconds": 1.2}))
+                await ws.send(json.dumps({"type": "final", "segment": 1, "text": "to GTBank",
+                                          "start_seconds": 1.4, "end_seconds": 2.0}))
+                await ws.send(json.dumps({"type": "done", "reason": "finalized", "stream_id": "s1"}))
+                await ws.close(1000)
+                return
+
+    async def main():
+        async with serve(handler, "127.0.0.1", 0) as server:
+            port = server.sockets[0].getsockname()[1]
+            p = YarnGPTSTTProvider(url=f"ws://127.0.0.1:{port}/api/v1/asr/stream", api_key="sk_test")
+            return await p.transcribe(PCM, "en", 16000, chunk_ms=50)
+
+    res = run(main())
+    assert res.text == "send five thousand naira to GTBank"
+    assert seen["auth"] == "Bearer sk_test" and seen["path"] == "/api/v1/asr/stream"
+    assert seen["start"]["audio"]["sample_rate"] == 16000 and seen["audio"] == len(PCM)
+
+
+def test_sahara_scaffold_parse_tolerates_common_shapes():
+    p = SaharaSTTProvider(url="wss://x.test/asr")
     assert p.parse_message(json.dumps({"transcript": "hi", "is_final": True}))[0].is_final
     assert not p.parse_message(json.dumps({"text": "hi", "final": False}))[0].is_final
     assert p.parse_message(json.dumps({"result": {"text": "hi", "isFinal": True}}))[0].text == "hi"
@@ -162,21 +221,53 @@ def test_wav_roundtrip_and_decode():
 
 
 # ---- TTS -------------------------------------------------------------------------------
-def tts_with(handler, **kw):
-    return YarnGPTTTS(api_key="k", url="http://tts.test/v1/tts", default_voice="V",
+CONVERSATION = "https://api.yarngpt.ai/api/v1/streaming/conversation"
+
+
+def tts_with(handler, url=CONVERSATION, **kw):
+    return YarnGPTTTS(api_key="k", url=url, default_voice="V",
                       client=httpx.AsyncClient(transport=httpx.MockTransport(handler)), **kw)
 
 
-def test_yarngpt_tts_decodes_wav_and_sends_request():
+def test_yarngpt_tts_uses_the_conversation_route_and_reads_the_rate_header():
     seen = {}
 
     def handler(req):
-        seen["json"], seen["auth"] = json.loads(req.read()), req.headers["Authorization"]
-        return httpx.Response(200, content=pcm_to_wav_bytes(tone_pcm(0.1, 24000), 24000))
+        seen["url"], seen["json"] = str(req.url), json.loads(req.read())
+        seen["auth"], seen["idem"] = req.headers["Authorization"], req.headers.get("Idempotency-Key")
+        return httpx.Response(200, content=tone_pcm(0.1, 22050),
+                              headers={"Content-Type": "audio/l16; rate=22050; channels=1"})
 
     res = run(tts_with(handler).synthesize("Hello", None, "en"))
-    assert res.sample_rate == 24000 and len(res.pcm) == 4800 and res.timing.time_to_first_audio_ms >= 0
-    assert seen["json"]["text"] == "Hello" and seen["json"]["voice"] == "V" and seen["auth"] == "Bearer k"
+    assert seen["url"] == CONVERSATION
+    assert seen["json"] == {"text": "Hello", "output_format": "pcm", "voice": "V"}
+    assert seen["auth"] == "Bearer k" and seen["idem"]
+    assert res.sample_rate == 22050 and len(res.pcm) == 4410  # rate from the header, never assumed
+    assert res.timing.time_to_first_audio_ms is not None
+
+
+def test_yarngpt_tts_still_decodes_wav():
+    res = run(tts_with(lambda r: httpx.Response(200, content=pcm_to_wav_bytes(tone_pcm(0.1, 24000), 24000),
+                                                 headers={"Content-Type": "audio/wav"})).synthesize("Hi", None, "en"))
+    assert res.sample_rate == 24000 and len(res.pcm) == 4800
+
+
+@pytest.mark.parametrize("configured", [
+    "wss://api.yarngpt.ai/api/v1/asr/stream",   # the ASR socket pasted into the TTS setting
+    "https://api.yarngpt.ai/api/v1/tts",        # the async job route: returns a job id, not audio
+    "",
+])
+def test_yarngpt_tts_url_is_corrected_to_the_conversation_route(configured, monkeypatch):
+    monkeypatch.delenv("YARNGPT_TTS_URL", raising=False)
+    assert YarnGPTTTS(api_key="k", url=configured).url == CONVERSATION
+
+
+def test_yarngpt_tts_reports_the_error_envelope():
+    body = {"error": {"code": "QUOTA_EXCEEDED", "message": "top up", "trace_id": "tr_1"}}
+    tts = tts_with(lambda r: httpx.Response(402, json=body))
+    with pytest.raises(ProviderError, match="402 QUOTA_EXCEEDED"):
+        run(tts.synthesize("Hi", None, "en"))
+    assert "tr_1" in tts.last_error
 
 
 def test_yarngpt_tts_errors():

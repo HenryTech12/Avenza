@@ -176,10 +176,17 @@ class STTProvider(abc.ABC):
         task = asyncio.create_task(consume())
         try:
             step = max(2, int(sample_rate * 2 * chunk_ms / 1000) // 2 * 2)
+            # Providers that limit upload speed declare (allowance_s, max_speed):
+            # e.g. YarnGPT takes 5 s at once, then at most 2x real time.
+            pace = getattr(self, "pace", None)
+            sent_s = 0.0
             for off in range(0, len(pcm), step):
                 await stream.send_audio(pcm[off : off + step])
                 if realtime:
                     await asyncio.sleep(chunk_ms / 1000)
+                elif pace and sent_s >= pace[0]:
+                    await asyncio.sleep(chunk_ms / 1000 / pace[1])
+                sent_s += chunk_ms / 1000
             await stream.finish()
             await asyncio.wait_for(task, timeout)
         except BaseException:

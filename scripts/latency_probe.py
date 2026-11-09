@@ -104,7 +104,7 @@ def probe_customer(app) -> SessionContext:
 async def speak(tts, text: str) -> tuple[bytes, int]:
     result = await tts.synthesize(text, language="en")
     if result.is_empty:
-        raise RuntimeError("TTS returned no audio")
+        raise RuntimeError(f"TTS returned no audio: {getattr(tts, 'last_error', None) or 'see logs'}")
     return result.pcm, int(result.sample_rate)
 
 
