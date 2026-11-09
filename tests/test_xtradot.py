@@ -641,7 +641,10 @@ async def test_ai_yarngpt_tts_returns_audio_end_to_end(monkeypatch):
     from avenza.providers.ai_speech import AIYarnTTS
 
     def handler(request):
+        if request.url.path == "/api/v1/voices":
+            return httpx.Response(200, json=[{"name": "adaora", "default": True}])
         assert request.url.path == "/api/v1/streaming/conversation"
+        assert json.loads(request.content)["voice"] == "adaora"  # required by YarnGPT
         return httpx.Response(200, content=b"\x01\x00" * 2205,
                               headers={"Content-Type": "audio/l16; rate=22050; channels=1"})
 

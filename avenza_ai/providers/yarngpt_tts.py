@@ -1,6 +1,10 @@
 """YarnGPT text-to-speech for spoken replies (API v1, "Conversation").
 
-Uses the real-time single-turn route, which returns raw audio in the response:
+Uses the real-time single-turn route, which returns raw audio in the response.
+``voice`` is required on this route (422 "Field required" without it, seen on
+9 Nov 2026), so when none is configured the account's default voice from
+GET /api/v1/voices is used.
+
 
     POST https://api.yarngpt.ai/api/v1/streaming/conversation
     Authorization: Bearer <key>
@@ -62,6 +66,28 @@ class YarnGPTTTS(TTSProvider):
         self.response_format, self.default_sample_rate = response_format, default_sample_rate
         self.timeout, self._client = timeout, client
         self.last_error: Optional[str] = None
+        self._resolved_voice: Optional[str] = None
+
+    async def _voice(self, client: httpx.AsyncClient) -> Optional[str]:
+        """The configured voice, else the catalogue default (looked up once)."""
+        if self.default_voice:
+            return self.default_voice
+        if self._resolved_voice:
+            return self._resolved_voice
+        base = self.url.split("/api/")[0]
+        try:
+            resp = await client.get(f"{base}/api/v1/voices", headers={"Authorization": f"Bearer {self.api_key}"})
+            voices = resp.json() if resp.status_code == 200 else []
+        except (httpx.HTTPError, ValueError):
+            voices = []
+        if isinstance(voices, dict):
+            voices = voices.get("voices") or voices.get("data") or []
+        names = [v for v in voices if isinstance(v, dict) and v.get("name")]
+        chosen = next((v["name"] for v in names if v.get("default")), None) or (names[0]["name"] if names else None)
+        if chosen:
+            self._resolved_voice = chosen
+            logger.info("YARNGPT_DEFAULT_VOICE not set; using %s", chosen)
+        return chosen
 
     def is_configured(self) -> bool:
         return bool(self.api_key)
@@ -72,8 +98,9 @@ class YarnGPTTTS(TTSProvider):
         text = (text or "").strip()
         if not text:
             raise ProviderError("nothing to synthesize")
+        client = self._client or httpx.AsyncClient(timeout=self.timeout)
         payload = {"text": text[:MAX_CHARS], "output_format": self.response_format}
-        v = voice or self.default_voice
+        v = voice or await self._voice(client)
         if v:
             payload["voice"] = v
         headers = {
@@ -81,7 +108,6 @@ class YarnGPTTTS(TTSProvider):
             "Idempotency-Key": uuid.uuid4().hex,
             "Content-Type": "application/json",
         }
-        client = self._client or httpx.AsyncClient(timeout=self.timeout)
         t0 = time.perf_counter()
         first_audio_ms: Optional[float] = None
         chunks: list[bytes] = []

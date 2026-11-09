@@ -332,6 +332,8 @@ class AIYarnTTS(TTSProvider):
             api_key=settings.yarngpt_api_key or settings.yarn_api_key or None,
             url=settings.yarngpt_tts_url or settings.yarn_tts_url or None,
             default_voice=settings.yarngpt_default_voice or settings.yarn_tts_voice or None,
+            # A stalled stream falls back to the device voice instead of a long silence.
+            timeout=max(2.0, float(settings.tts_timeout_s)),
         )
         if not self.tts.is_configured():
             raise ProviderNotConfigured("YARNGPT_API_KEY / YARN_API_KEY is not set")

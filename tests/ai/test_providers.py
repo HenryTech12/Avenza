@@ -406,3 +406,24 @@ def test_registry_only_serves_languages_that_passed(tmp_path):
         c.stt_for("ha")
     default = ProviderChoice.load(str(tmp_path / "missing.json"))
     assert default.enabled_languages == ["en", "pcm"]
+
+
+def test_yarngpt_tts_uses_the_catalogue_default_voice_when_none_is_set(monkeypatch):
+    monkeypatch.delenv("YARNGPT_DEFAULT_VOICE", raising=False)
+    calls = {"voices": 0, "bodies": []}
+
+    def handler(req):
+        if req.url.path == "/api/v1/voices":
+            calls["voices"] += 1
+            return httpx.Response(200, json=[{"name": "umar", "default": False}, {"name": "adaora", "default": True}])
+        body = json.loads(req.read())
+        calls["bodies"].append(body)
+        if "voice" not in body:  # what YarnGPT really does
+            return httpx.Response(422, json={"error": {"code": "INVALID_INPUT", "details": {"errors": [{"loc": ["body", "voice"]}]}}})
+        return httpx.Response(200, content=tone_pcm(0.05, 24000), headers={"Content-Type": "audio/l16; rate=24000; channels=1"})
+
+    tts = YarnGPTTTS(api_key="k", url=CONVERSATION, client=httpx.AsyncClient(transport=httpx.MockTransport(handler)))
+    run(tts.synthesize("Hi", None, "en"))
+    run(tts.synthesize("Again", None, "en"))
+    assert [b["voice"] for b in calls["bodies"]] == ["adaora", "adaora"]
+    assert calls["voices"] == 1  # looked up once
