@@ -634,3 +634,37 @@ async def test_latency_probe_speech_path(sim, monkeypatch, tmp_path):
 
 async def asyncio_sleep0():
     return None
+
+
+async def test_ai_yarngpt_tts_returns_audio_end_to_end(monkeypatch):
+    """The real AIYarnTTS wrapper, with YarnGPT's conversation route mocked at HTTP level."""
+    from avenza.providers.ai_speech import AIYarnTTS
+
+    def handler(request):
+        assert request.url.path == "/api/v1/streaming/conversation"
+        return httpx.Response(200, content=b"\x01\x00" * 2205,
+                              headers={"Content-Type": "audio/l16; rate=22050; channels=1"})
+
+    real = httpx.AsyncClient
+
+    def factory(*args, **kwargs):
+        kwargs["transport"] = httpx.MockTransport(handler)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr("avenza_ai.providers.yarngpt_tts.httpx.AsyncClient", factory)
+    # The misconfiguration seen on the cluster: the ASR socket in the TTS setting.
+    tts = AIYarnTTS(Settings().for_test(yarngpt_api_key="sk_x", yarngpt_tts_url="https://api.yarngpt.ai/api/v1/asr/stream"))
+    result = await tts.synthesize("Payment settled.")
+    assert result is not None and not result.is_empty
+    assert result.sample_rate == 22050 and len(result.pcm) == 4410 and result.ttfa_ms >= 0
+    assert tts.last_error is None
+
+    def failing(request):
+        return httpx.Response(402, json={"error": {"code": "QUOTA_EXCEEDED", "message": "top up", "trace_id": "t9"}})
+
+    monkeypatch.setattr(
+        "avenza_ai.providers.yarngpt_tts.httpx.AsyncClient",
+        lambda *a, **k: real(*a, **{**k, "transport": httpx.MockTransport(failing)}),
+    )
+    empty = await tts.synthesize("Payment settled.")
+    assert empty.is_empty and "QUOTA_EXCEEDED" in tts.last_error

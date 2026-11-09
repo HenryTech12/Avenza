@@ -257,10 +257,6 @@ class AIYarnTTS(TTSProvider):
             # The client falls back to the device voice; say why in the logs.
             logger.warning("tts failed: %s", exc)
             return AudioResult(b"", 24000, self.name, text=text, simulated=False)
-
-    @property
-    def last_error(self) -> str | None:
-        return getattr(self.tts, "last_error", None)
         elapsed = int((time.perf_counter() - start) * 1000)
         return AudioResult(
             result.pcm,
@@ -270,3 +266,7 @@ class AIYarnTTS(TTSProvider):
             total_ms=elapsed,
             text=text,
         )
+
+    @property
+    def last_error(self) -> str | None:
+        return getattr(self.tts, "last_error", None)
