@@ -7,7 +7,7 @@ name: Forge image
 
 on:
   push:
-    branches: [main, feat/avenza-backend-v1]
+    branches: [main, master, feat/avenza-backend-v1, feat/backend-ai]
   workflow_dispatch:
 
 permissions:
