@@ -18,6 +18,7 @@ class _WSStream(STTStream):
         self._ws = None
         self._reader: Optional[asyncio.Task] = None
         self._open_lock = asyncio.Lock()
+        self._state: dict = {}  # per-stream scratch space for provider framing
 
     async def _ensure_open(self) -> None:
         async with self._open_lock:
@@ -34,6 +35,10 @@ class _WSStream(STTStream):
                 start = self._p.start_message(self._lang, self._rate)
                 if start:
                     await self._ws.send(start)
+                # Some providers must confirm the session before audio is sent.
+                await asyncio.wait_for(self._p.await_ready(self._ws), self._p.connect_timeout)
+            except ProviderError:
+                raise
             except Exception as exc:  # noqa: BLE001
                 raise ProviderError(f"{self._p.name}: could not connect: {exc}") from exc
             self._reader = asyncio.create_task(self._read())
@@ -51,10 +56,13 @@ class _WSStream(STTStream):
 
     async def _send(self, pcm: bytes) -> None:
         await self._ensure_open()
-        await self._ws.send(pcm)
+        for message in self._p.frame_audio(self._state, pcm):
+            await self._ws.send(message)
 
     async def _finish(self) -> None:
         await self._ensure_open()
+        for message in self._p.flush_audio(self._state):
+            await self._ws.send(message)
         end = self._p.end_message()
         if end is not None:
             await self._ws.send(end)
@@ -89,6 +97,9 @@ class WebSocketSTTProvider(STTProvider):
     def url(self, language: str, sample_rate: int) -> str: raise NotImplementedError
     def headers(self) -> Dict[str, str]: return {}
     def start_message(self, language: str, sample_rate: int) -> Optional[str]: return None
+    async def await_ready(self, ws) -> None: return None
+    def frame_audio(self, state: dict, pcm: bytes) -> list: return [pcm]
+    def flush_audio(self, state: dict) -> list: return []
     def end_message(self) -> Optional[str]: return None
     def parse_message(self, raw: str) -> List[TranscriptEvent]: raise NotImplementedError
 
@@ -274,6 +285,116 @@ class YarnGPTSTTProvider(_GenericWSProvider):
         return []  # status, started, done, translation, and unknown types
 
 
+INTRON_STREAM_URL = "wss://infer.voice.intron.io/stt/v1/stream"
+
+
 class SaharaSTTProvider(_GenericWSProvider):
+    """Intron Sahara streaming speech-to-text (docs.voice.intron.io/docs/stt/streaming).
+
+    Protocol, from Intron's documentation:
+    - ``wss://infer.voice.intron.io/stt/v1/stream?use_language_asr_input=<code>
+      &sample_rate=16000&bit_rate=16&num_channels=1`` with ``Authorization: Bearer``.
+    - Wait for ``SESSION_CREATED`` before sending audio.
+    - Audio goes as JSON text frames ``{"message_type": "INPUT_AUDIO_CHUNK",
+      "audio_base_64": ...}``; each chunk 1-32 KB of PCM16.
+    - ``{"message_type": "COMMIT"}`` ends the utterance; the server answers
+      ``COMMITTED_TRANSCRIPT`` (``transcript_text``) and closes.
+    - Partial text arrives as ``PARTIAL_TRANSCRIPT`` (``transcript``).
+    - Limits: 3 connections a minute, 3 at once, 300 s per session.
+    Language codes: only ``en`` is confirmed in the docs; override others with
+    SAHARA_LANG_MAP, e.g. ``pcm=en,yo=yo``.
+    """
+
     name = "sahara"
     prefix = "SAHARA"
+    cumulative_finals = False
+    MIN_CHUNK = 1024
+    TARGET_CHUNK = 8000  # 0.25 s at 16 kHz, as in Intron's example
+    MAX_CHUNK = 32 * 1024
+    ERRORS = {
+        "ERROR", "INPUT_ERROR", "AUTHENTICATION_ERROR", "RESOURCE_EXHAUSTED", "QUOTA_EXCEEDED",
+        "CHUNK_SIZE_TOO_SMALL", "CHUNK_SIZE_TOO_LARGE", "INSUFFICIENT_AUDIO_ACTIVITY",
+        "SESSION_TIME_LIMIT_EXCEEDED", "CHUNK_ID_MISMATCH_WITH_TOTAL",
+    }
+
+    def __init__(self, url: Optional[str] = None, api_key: Optional[str] = None,
+                 languages: Optional[Dict[str, str]] = None):
+        langs = {"en": "en", "pcm": "pcm", "yo": "yo", "ha": "ha", "ig": "ig"}
+        for item in os.getenv("SAHARA_LANG_MAP", "").split(","):
+            if "=" in item:
+                k, v = (x.strip() for x in item.split("=", 1))
+                if k and v:
+                    langs[k] = v
+        super().__init__(url=url or os.getenv("SAHARA_ASR_WS_URL") or INTRON_STREAM_URL,
+                         api_key=api_key, languages=languages or langs)
+        self._url = self._url.split("?")[0]
+
+    def is_configured(self) -> bool:
+        return bool(self._url and self._key)
+
+    def url(self, language: str, sample_rate: int) -> str:
+        return f"{self._url}?" + urlencode({
+            "sample_rate": int(sample_rate), "bit_rate": 16, "num_channels": 1,
+            "use_language_asr_input": self.languages.get(language, language),
+        })
+
+    async def await_ready(self, ws) -> None:
+        async for raw in ws:
+            if not isinstance(raw, str):
+                continue
+            msg = json.loads(raw)
+            kind = msg.get("message_type")
+            if kind == "SESSION_CREATED":
+                return
+            if kind in self.ERRORS:
+                raise ProviderError(f"sahara: {kind} {msg.get('message') or msg.get('status') or ''}".strip())
+        raise ProviderError("sahara: connection closed before SESSION_CREATED")
+
+    def _chunk(self, pcm: bytes) -> str:
+        import base64
+
+        return json.dumps({"message_type": "INPUT_AUDIO_CHUNK",
+                           "audio_base_64": base64.b64encode(pcm).decode("ascii")})
+
+    def frame_audio(self, state: dict, pcm: bytes) -> list:
+        # Buffer to 1-32 KB chunks: browser frames are often smaller than 1 KB.
+        buf = state.setdefault("buf", bytearray())
+        buf.extend(pcm)
+        out = []
+        while len(buf) >= self.TARGET_CHUNK:
+            out.append(self._chunk(bytes(buf[: self.TARGET_CHUNK])))
+            del buf[: self.TARGET_CHUNK]
+        return out
+
+    def flush_audio(self, state: dict) -> list:
+        buf = state.get("buf") or bytearray()
+        if not buf:
+            return []
+        tail = bytes(buf)
+        state["buf"] = bytearray()
+        if len(tail) % 2:
+            tail = tail[:-1]
+        if len(tail) < self.MIN_CHUNK:
+            tail = tail + b"\x00" * (self.MIN_CHUNK - len(tail))  # pad with silence, never drop speech
+        return [self._chunk(tail[i : i + self.MAX_CHUNK]) for i in range(0, len(tail), self.MAX_CHUNK)]
+
+    def end_message(self) -> Optional[str]:
+        return json.dumps({"message_type": "COMMIT"})
+
+    def parse_message(self, raw: str) -> List[TranscriptEvent]:
+        try:
+            msg = json.loads(raw)
+        except json.JSONDecodeError:
+            return []
+        if not isinstance(msg, dict):
+            return []
+        kind = msg.get("message_type")
+        if kind in self.ERRORS:
+            raise ProviderError(f"sahara: {kind} {msg.get('message') or msg.get('status') or ''}".strip())
+        if kind == "PARTIAL_TRANSCRIPT":
+            text = str(msg.get("transcript") or "").strip()
+            return [TranscriptEvent(text, False, None)] if text else []
+        if kind == "COMMITTED_TRANSCRIPT":
+            text = str(msg.get("transcript_text") or "").strip()
+            return [TranscriptEvent(text, True, None)] if text else []
+        return []  # SESSION_CREATED, AUDIO_CHUNK_ACK, unknown types

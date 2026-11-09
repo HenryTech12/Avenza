@@ -41,8 +41,11 @@ class AILiveStream(STTStream):
     def __init__(self, owner: "AIWebSocketSTT", language_hint: str, sample_rate: int):
         self.owner = owner
         self.language_hint = language_hint
-        self.language, self.provider = owner._provider_for(language_hint)
+        # Primary provider first, then configured fallbacks ("en=sahara|yarngpt").
+        self.language, self.providers = owner._providers_for(language_hint)
+        self.provider = self.providers[0]
         self.sample_rate = sample_rate
+        self._audio = bytearray()  # kept so a fallback provider can hear the whole turn
         self.on_partial: PartialCallback | None = None
         self._stream = None
         self._task: asyncio.Task | None = None
@@ -74,8 +77,60 @@ class AILiveStream(STTStream):
             self._error = exc
 
     async def push(self, pcm: bytes) -> None:
+        self._audio.extend(pcm)
+        try:
+            await self._ensure()
+            await self._stream.send_audio(pcm)
+        except Exception as exc:  # noqa: BLE001
+            if not await self._switch(exc):
+                raise
+
+    def _next_provider(self):
+        index = self.providers.index(self.provider)
+        return self.providers[index + 1] if index + 1 < len(self.providers) else None
+
+    async def _switch(self, exc: BaseException) -> bool:
+        """Move the live stream to the next provider and replay the audio so far."""
+        nxt = self._next_provider()
+        if nxt is None:
+            return False
+        logger.warning("live STT %s failed (%s); switching to %s", self.provider.name, exc, nxt.name)
+        await self.abort()
+        self.provider = nxt
+        self._stream, self._task, self._finals, self._interim, self._error = None, None, [], "", None
         await self._ensure()
-        await self._stream.send_audio(pcm)
+        audio = bytes(self._audio)
+        for i in range(0, len(audio), 8000):
+            await self._stream.send_audio(audio[i : i + 8000])
+        return True
+
+    async def _fallback_batch(self, reason: str) -> TranscriptResult | None:
+        """The live stream failed at the end: transcribe the whole turn elsewhere."""
+        audio = bytes(self._audio)
+        nxt = self._next_provider()
+        while nxt is not None and audio:
+            logger.warning("live STT %s failed (%s); transcribing with %s", self.provider.name, reason, nxt.name)
+            self.provider = nxt
+            try:
+                result = await nxt.transcribe(
+                    audio, self.language, self.sample_rate, timeout=self.owner.settings.ai_stt_timeout_s
+                )
+            except Exception as exc:  # noqa: BLE001
+                reason = type(exc).__name__
+                nxt = self._next_provider()
+                continue
+            text = (result.text or "").strip()
+            return TranscriptResult(
+                text=text,
+                confidence=float(result.confidence or 0.0),
+                provider=f"ai:{nxt.name}",
+                ttfp_ms=int(result.timing.time_to_first_partial_ms or 0),
+                final_ms=int(result.timing.time_to_final_ms or 0),
+                language=self.language,
+                simulated=False,
+                error=None if text else "no_speech",
+            )
+        return None
 
     async def abort(self) -> None:
         if self._stream is not None:
@@ -94,6 +149,9 @@ class AILiveStream(STTStream):
             await asyncio.wait_for(asyncio.shield(self._task), self.owner.settings.ai_stt_timeout_s)
         except Exception as exc:  # noqa: BLE001
             await self.abort()
+            fallback = await self._fallback_batch(type(exc).__name__)
+            if fallback is not None:
+                return fallback
             return TranscriptResult(
                 "", 0.0, name, language=self.language, error=f"ai_stt_error:{type(exc).__name__}"
             )
@@ -104,6 +162,9 @@ class AILiveStream(STTStream):
                 except Exception:  # noqa: BLE001
                     pass
         if self._error is not None:
+            fallback = await self._fallback_batch(type(self._error).__name__)
+            if fallback is not None:
+                return fallback
             return TranscriptResult(
                 "", 0.0, name, language=self.language, error=f"ai_stt_error:{type(self._error).__name__}"
             )
@@ -125,25 +186,30 @@ class AILiveStream(STTStream):
 _STT_NAMES = {"deepgram", "yarngpt", "sahara"}
 
 
-def _choice_from_settings(settings: Settings) -> ProviderChoice:
-    """AI_STT_CHOICE ("en=sahara,pcm=sahara") wins over the language-test file.
+def _choice_from_settings(settings: Settings) -> tuple[ProviderChoice, dict[str, list[str]]]:
+    """AI_STT_CHOICE wins over the language-test file.
 
-    Lets the team pick a provider per language on the cluster, where the
+    ``en=sahara|yarngpt,pcm=sahara`` means: English goes to Sahara, and to
+    YarnGPT if Sahara refuses or fails (for example its 3-connections-a-minute
+    limit). Lets the team pick providers on the cluster, where the
     language-test output (reports/provider_choice.json) is not in the image.
     """
     raw = settings.ai_stt_choice
     if not raw:
-        return ProviderChoice.load(settings.ai_provider_choice)
+        return ProviderChoice.load(settings.ai_provider_choice), {}
     choice: dict[str, str] = {}
+    fallbacks: dict[str, list[str]] = {}
     for item in raw.split(","):
         if "=" not in item:
             continue
-        language, provider = (part.strip().lower() for part in item.split("=", 1))
-        if language and provider in _STT_NAMES:
-            choice[language] = provider
+        language, providers = (part.strip().lower() for part in item.split("=", 1))
+        names = [p.strip() for p in providers.split("|") if p.strip() in _STT_NAMES]
+        if language and names:
+            choice[language] = names[0]
+            fallbacks[language] = names[1:]
     if not choice:
         raise ProviderNotConfigured(f"AI_STT_CHOICE has no valid entries: {raw!r}")
-    return ProviderChoice(choice, list(choice))
+    return ProviderChoice(choice, list(choice)), fallbacks
 
 
 class AIWebSocketSTT(STTProvider):
@@ -154,7 +220,7 @@ class AIWebSocketSTT(STTProvider):
 
     def __init__(self, settings: Settings):
         self.settings = settings
-        self.choice = _choice_from_settings(settings)
+        self.choice, self.fallbacks = _choice_from_settings(settings)
         self.default_language = settings.ai_default_language
         self.factories = {
             "deepgram": lambda: DeepgramSTTProvider(
@@ -184,6 +250,19 @@ class AIWebSocketSTT(STTProvider):
         language = language if self.choice.is_enabled(language) else self.default_language
         return language, self.choice.stt_for(language, self.factories)
 
+    def _providers_for(self, language: str):
+        """Primary provider, then configured fallbacks that have credentials."""
+        language, primary = self._provider_for(language)
+        chain = [primary]
+        for name in self.fallbacks.get(language, []):
+            factory = self.factories.get(name)
+            if factory is None:
+                continue
+            provider = factory()
+            if provider.is_configured() and provider.name != primary.name:
+                chain.append(provider)
+        return language, chain
+
     def stream(self, language_hint: str = "en", sample_rate: int = 16000) -> STTStream:
         """A live stream when STT_STREAMING is on, else the buffered default."""
         if not self.settings.stt_streaming:
@@ -202,21 +281,29 @@ class AIWebSocketSTT(STTProvider):
         if not pcm:
             return TranscriptResult("", 0.0, self.name, language=language_hint, error="no_speech")
 
-        try:
-            language, provider = self._provider_for(language_hint)
-            result = await provider.transcribe(
-                pcm,
-                language,
-                sample_rate,
-                timeout=self.settings.ai_stt_timeout_s,
-            )
-        except Exception as exc:  # noqa: BLE001 - surfaced honestly to the client
+        result = provider = None
+        error = "no provider"
+        language, chain = self._providers_for(language_hint)
+        for candidate in chain:
+            try:
+                result = await candidate.transcribe(
+                    pcm,
+                    language,
+                    sample_rate,
+                    timeout=self.settings.ai_stt_timeout_s,
+                )
+                provider = candidate
+                break
+            except Exception as exc:  # noqa: BLE001 - try the next provider
+                error = type(exc).__name__
+                logger.warning("STT %s failed (%s)", candidate.name, exc)
+        if result is None:
             return TranscriptResult(
                 "",
                 0.0,
                 self.name,
                 language=language_hint,
-                error=f"ai_stt_error:{type(exc).__name__}",
+                error=f"ai_stt_error:{error}",
             )
 
         text = (result.text or "").strip()

@@ -200,14 +200,123 @@ def test_yarngpt_asr_stream_against_a_documented_server():
     assert seen["start"]["audio"]["sample_rate"] == 16000 and seen["audio"] == len(PCM)
 
 
-def test_sahara_scaffold_parse_tolerates_common_shapes():
-    p = SaharaSTTProvider(url="wss://x.test/asr")
-    assert p.parse_message(json.dumps({"transcript": "hi", "is_final": True}))[0].is_final
-    assert not p.parse_message(json.dumps({"text": "hi", "final": False}))[0].is_final
-    assert p.parse_message(json.dumps({"result": {"text": "hi", "isFinal": True}}))[0].text == "hi"
-    assert p.parse_message(json.dumps({"ping": 1})) == []
-    with pytest.raises(ProviderError):
-        p.parse_message(json.dumps({"error": "quota"}))
+def _intron_server(seen, *, refuse=False):
+    """A fake Intron Sahara stream that enforces the documented rules."""
+    import base64
+
+    async def handler(ws):
+        seen["path"] = ws.request.path
+        seen["auth"] = ws.request.headers.get("Authorization")
+        if refuse:
+            await ws.send(json.dumps({"message_type": "RESOURCE_EXHAUSTED", "status": "CAPACITY_NOT_AVAILABLE"}))
+            await ws.close(1000)
+            return
+        await ws.send(json.dumps({"message_type": "SESSION_CREATED", "session_id": "s1", "credit_balance": 10,
+                                  "configs": {"sample_rate": 16000}}))
+        seen["chunks"] = []
+        async for raw in ws:
+            assert isinstance(raw, str), "Intron takes JSON text frames, not binary"
+            msg = json.loads(raw)
+            if msg["message_type"] == "INPUT_AUDIO_CHUNK":
+                size = len(base64.b64decode(msg["audio_base_64"]))
+                if not 1024 <= size <= 32 * 1024:
+                    await ws.send(json.dumps({"message_type": "CHUNK_SIZE_TOO_SMALL" if size < 1024 else "CHUNK_SIZE_TOO_LARGE"}))
+                    await ws.close(1000)
+                    return
+                seen["chunks"].append(size)
+                await ws.send(json.dumps({"message_type": "AUDIO_CHUNK_ACK", "chunk_id": len(seen["chunks"])}))
+                if len(seen["chunks"]) == 1:
+                    await ws.send(json.dumps({"message_type": "PARTIAL_TRANSCRIPT", "transcript": "send five"}))
+            elif msg["message_type"] == "COMMIT":
+                await ws.send(json.dumps({"message_type": "COMMITTED_TRANSCRIPT", "transcript_id": "t1",
+                                          "transcript_text": "send five thousand naira abeg", "audio_len": 1.0}))
+                await ws.close(1000)
+                return
+
+    return handler
+
+
+def test_sahara_follows_intron_streaming_protocol():
+    from websockets.asyncio.server import serve
+
+    seen = {}
+
+    async def main():
+        async with serve(_intron_server(seen), "127.0.0.1", 0) as server:
+            port = server.sockets[0].getsockname()[1]
+            p = SaharaSTTProvider(url=f"ws://127.0.0.1:{port}/stt/v1/stream", api_key="ik")
+            # 20 ms frames (640 bytes) are below Intron's 1 KB minimum: they must be buffered.
+            return await p.transcribe(PCM * 3, "en", 16000, chunk_ms=20)
+
+    res = run(main())
+    assert res.text == "send five thousand naira abeg"
+    assert seen["auth"] == "Bearer ik"
+    assert "use_language_asr_input=en" in seen["path"] and "sample_rate=16000" in seen["path"]
+    assert sum(seen["chunks"]) >= len(PCM) * 3 and all(1024 <= c <= 32768 for c in seen["chunks"])
+
+
+def test_sahara_short_tail_is_padded_not_dropped():
+    p = SaharaSTTProvider(url="wss://x/stt/v1/stream", api_key="k")
+    state = {}
+    assert p.frame_audio(state, b"\x01\x00" * 100) == []  # 200 bytes: buffered
+    (msg,) = p.flush_audio(state)
+    import base64
+
+    assert len(base64.b64decode(json.loads(msg)["audio_base_64"])) == 1024
+
+
+def test_sahara_errors_and_events():
+    p = SaharaSTTProvider(url="wss://x/stt/v1/stream", api_key="k")
+    assert p.parse_message(json.dumps({"message_type": "PARTIAL_TRANSCRIPT", "transcript": "hi"}))[0].is_final is False
+    assert p.parse_message(json.dumps({"message_type": "COMMITTED_TRANSCRIPT", "transcript_text": "hi"}))[0].is_final
+    assert p.parse_message(json.dumps({"message_type": "AUDIO_CHUNK_ACK", "chunk_id": 1})) == []
+    with pytest.raises(ProviderError, match="QUOTA_EXCEEDED"):
+        p.parse_message(json.dumps({"message_type": "QUOTA_EXCEEDED", "message": "no credits"}))
+    assert json.loads(p.end_message()) == {"message_type": "COMMIT"}
+    assert p.url("en", 16000).startswith("wss://x/stt/v1/stream?")
+
+
+def test_sahara_refusal_falls_back_to_the_next_provider():
+    """Intron allows 3 connections a minute: a refused turn must still be heard."""
+    from websockets.asyncio.server import serve
+
+    from avenza.config import Settings
+    from avenza.providers.ai_speech import AIWebSocketSTT
+
+    seen_sahara, seen_yarn = {}, {"audio": 0}
+
+    async def yarn_handler(ws):
+        json.loads(await ws.recv())
+        await ws.send(json.dumps({"type": "started"}))
+        async for msg in ws:
+            if isinstance(msg, bytes):
+                seen_yarn["audio"] += len(msg)
+            elif json.loads(msg)["type"] == "finalize":
+                await ws.send(json.dumps({"type": "final", "segment": 0, "text": "send five thousand naira"}))
+                await ws.send(json.dumps({"type": "done", "reason": "finalized"}))
+                await ws.close(1000)
+                return
+
+    async def main():
+        async with serve(_intron_server(seen_sahara, refuse=True), "127.0.0.1", 0) as sahara, \
+                serve(yarn_handler, "127.0.0.1", 0) as yarn:
+            settings = Settings().for_test(
+                stt_provider="ai",
+                ai_stt_choice="en=sahara|yarngpt",
+                sahara_api_key="ik",
+                sahara_asr_url=f"ws://127.0.0.1:{sahara.sockets[0].getsockname()[1]}/stt/v1/stream",
+                yarngpt_api_key="yk",
+                yarngpt_asr_url=f"ws://127.0.0.1:{yarn.sockets[0].getsockname()[1]}/api/v1/asr/stream",
+            )
+            stt = AIWebSocketSTT(settings)
+            live = stt.stream("en", 16000)
+            for i in range(0, len(PCM), 640):
+                await live.push(PCM[i : i + 640])
+            return await live.end()
+
+    res = run(main())
+    assert res.text == "send five thousand naira" and res.provider == "ai:yarngpt"
+    assert seen_yarn["audio"] == len(PCM)  # every frame, including those before the switch
 
 
 # ---- audio helpers --------------------------------------------------------------------
