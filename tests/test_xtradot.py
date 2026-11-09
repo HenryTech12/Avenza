@@ -579,3 +579,58 @@ def test_stt_choice_per_language_from_settings():
     assert stt._provider_for("pcm")[1].name == "sahara"
     assert stt._provider_for("yo")[1].name == "yarngpt"
     assert stt._provider_for("ig")[0] == "en"  # not listed: falls back to the default language
+
+
+async def test_latency_probe_speech_path(sim, monkeypatch, tmp_path):
+    """The probe speaks with TTS, streams that audio to STT and logs every stage."""
+    import math
+    import struct
+
+    import scripts.latency_probe as probe
+    from avenza.providers.base import AudioResult, STTStream, TranscriptResult
+
+    class FakeTTS:
+        name, simulated = "yarngpt-fake", False
+
+        async def synthesize(self, text, voice="", language="en"):
+            samples = [int(8000 * math.sin(i / 10)) for i in range(24000)]  # 1 s at 24 kHz
+            return AudioResult(struct.pack(f"<{len(samples)}h", *samples), 24000, self.name, ttfa_ms=180, text=text)
+
+    class FakeStream(STTStream):
+        def __init__(self):
+            self.bytes = 0
+
+        async def push(self, pcm):
+            self.bytes += len(pcm)
+
+        async def end(self):
+            assert self.bytes == 32000  # 1 s resampled to 16 kHz
+            return TranscriptResult(probe.PHRASES[0], 0.93, "sahara-fake", ttfp_ms=220, final_ms=310)
+
+    class FakeSTT:
+        name, simulated = "ai:sahara-fake", False
+
+        def stream(self, language_hint="en", sample_rate=16000):
+            return FakeStream()
+
+    real_create_app = probe.create_app
+
+    def create_app_with_fakes(settings):
+        app = real_create_app(sandbox_settings(latency_log=str(tmp_path / "probe.jsonl")))
+        app.state.orchestrator.tts = FakeTTS()
+        app.state.orchestrator.stt = FakeSTT()
+        app.state.tts, app.state.stt = FakeTTS(), FakeSTT()
+        return app
+
+    monkeypatch.setattr(probe, "create_app", create_app_with_fakes)
+    monkeypatch.setattr(probe.asyncio, "sleep", lambda *_: asyncio_sleep0())
+    monkeypatch.setenv("LATENCY_LOG", str(tmp_path / "probe.jsonl"))
+    assert await probe.run(1, text_only=False) == 0
+    record = json.loads((tmp_path / "probe.jsonl").read_text().splitlines()[-1])
+    assert record["stt_ttfp_ms"] == 220 and record["tts_ttfa_ms"] == 180
+    assert record["name_enquiry_ms"] >= 0 and record["reply_ms"] >= 0
+    assert all(t.kind for t in sim.transfers.values()) and not sim.transfers  # draft cancelled, nothing sent
+
+
+async def asyncio_sleep0():
+    return None

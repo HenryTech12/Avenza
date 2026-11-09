@@ -97,7 +97,12 @@ class TurnOrchestrator:
         if getattr(self.tts, "simulated", True):
             return events
         for event in events:
-            if event.get("type") != "prompt.play" or event.get("audio_url") or not event.get("text"):
+            if (
+                event.get("type") != "prompt.play"
+                or event.get("audio_url")
+                or event.get("audio")
+                or not event.get("text")
+            ):
                 continue
             key = (event.get("language") or ctx.language, event["text"])
             cached = self._tts_cache.get(key)

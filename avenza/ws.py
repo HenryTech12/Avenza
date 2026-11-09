@@ -269,6 +269,9 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
             await abort_live(utterance)
             utterance = None
             events = await orchestrator.process_audio(ctx, b"", rate, provided_text=text)
+            # Synthesise the reply before closing the turn, so the latency
+            # record includes the voice (tts_ttfa_ms) and reply_ms covers it.
+            events = await orchestrator.render_audio(ctx, events)
             await send_events(orchestrator.finish_turn(ctx, events))
             return True
 
@@ -283,6 +286,9 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
             except (TypeError, ValueError):
                 vad_ms = None
             events = await finish_utterance(current, vad_ms)
+            # Synthesise the reply before closing the turn, so the latency
+            # record includes the voice (tts_ttfa_ms) and reply_ms covers it.
+            events = await orchestrator.render_audio(ctx, events)
             await send_events(orchestrator.finish_turn(ctx, events))
             return True
 
