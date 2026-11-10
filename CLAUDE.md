@@ -98,6 +98,10 @@ override the ConfigMap) and uses the `regcred` pull secret automatically.
 
 ## Open issues (as of 10 Nov 2026, morning)
 
+0. **YarnGPT credits ran out** (10 Nov 09:50; new account key added later that day, after deploying `sha-dd2a0de`): 18 credits left,
+   402 `QUOTA_EXCEEDED`. Cost is about **1 credit per character**: a read-back is ~180–300,
+   the startup pre-warm ~2,900 (50 prompts) **on every pod start**. Until topped up, every prompt
+   falls back to the phone's own voice. Set `TTS_PREWARM=false` if credits are scarce.
 1. **YarnGPT TTS** (probe run 10 Nov): minimum text is **20 characters** (422
    `INPUT_TOO_SHORT`); shorter text is no longer sent and English prompts are all ≥20.
    First audio is 3.5–4.6 s for 175 characters, arriving almost all at once. Fixed
@@ -111,12 +115,13 @@ override the ConfigMap) and uses the `regcred` pull secret automatically.
    Measured: `tts_ttfa_ms` 4584/4894 ms, `reply_ms` median 11392 ms (target ~2000);
    one read-back with a name-mismatch warning hit the 6 s TTS timeout.
    Next: compare `AI_STT_CHOICE=en=yarngpt|sahara` in one probe run.
-3. **Cloudflare Access now fronts team18.xtradot.co**: every request gets a 302 to
-   `centrictech.cloudflareaccess.com` (since 9 Nov ~22:20). Ask the Forge organisers whether it
-   is intended and how judges/phones get in. With the frontend served on the same origin
-   (done), a browser that has logged in to Access carries the cookie to the API and WebSocket.
-   Cross-origin hosting (Vercel) would not work behind Access. In-cluster calls (bank webhooks
-   to `app.team18.svc.cluster.local`) are unaffected.
+3. **Cloudflare Access fronts team18.xtradot.co until Demo Day** (organisers, 10 Nov): it is
+   intended; access opens only on the day. **Test and record locally** until then: local backend +
+   `avenza.bank.xtradot_sim` + real YarnGPT/Sahara keys in `.env`. Build the frontend with
+   `VITE_API_BASE_URL=` (empty) or it calls the cluster (`frontend/.env.production` points there).
+   Phone: `adb reverse tcp:8000 tcp:8000` and open `http://localhost:8000` (localhost is a secure
+   context; a self-signed LAN cert blocks WebAuthn in Chrome). The live phone path is first
+   exercised on Demo Day, so the recorded video is the fallback.
 4. **Phone end-to-end test not done yet** (voice + fingerprint + WebSocket through the gateway).
 5. **Frontend (PR #1)**: backend side of "serve the frontend" is done (Dockerfile node stage +
    `_mount_frontend` in `main.py`, SPA fallback, API prefixes never shadowed). To do: merge PR #1;

@@ -100,3 +100,47 @@ async def test_prewarm_survives_a_failing_prompt_and_skips_simulated_tts(service
     o.settings = dataclasses.replace(o.settings, tts_prewarm=False)
     o._tts_fixed.clear()
     assert await o.prewarm_tts() == 0
+
+
+async def test_prewarm_logs_when_it_starts_and_when_it_is_skipped(services, caplog):
+    """An empty `grep "tts prewarm"` must mean old code, not a silent skip (10 Nov)."""
+    import logging
+
+    o = services["orchestrator"]
+    with caplog.at_level(logging.INFO, logger="avenza.orchestrator"):
+        await o.prewarm_tts()  # mock TTS: simulated
+        o.tts = CountingTTS()
+        await o.prewarm_tts()
+    lines = [r.getMessage() for r in caplog.records if "tts prewarm" in r.getMessage()]
+    assert lines[0].startswith("tts prewarm: skipped (tts=")
+    assert lines[1].startswith("tts prewarm: starting ")
+    assert " fixed prompts cached in " in lines[2]
+
+
+class QuotaTTS(CountingTTS):
+    """Like AIYarnTTS: a 402 comes back as empty audio, with the reason in last_error."""
+
+    def __init__(self, credits_for: int):
+        super().__init__()
+        self.credits_for = credits_for
+        self.last_error = None
+
+    async def synthesize(self, text, voice="", language="en"):
+        self.texts.append(text)
+        if len(self.texts) > self.credits_for:
+            self.last_error = "HTTP 402 QUOTA_EXCEEDED insufficient credits"
+            return AudioResult(b"", 24000, self.name, text=text)
+        return AudioResult(b"\x01\x00" * 10, 24000, self.name, text=text)
+
+
+async def test_prewarm_stops_when_the_provider_is_out_of_credits(services, caplog):
+    """Cluster, 10 Nov: 18 of 50 cached, then 32 more calls each answered 402."""
+    import logging
+
+    o = services["orchestrator"]
+    o.tts = QuotaTTS(credits_for=5)
+    o.settings = dataclasses.replace(o.settings, tts_prewarm_concurrency=1)
+    with caplog.at_level(logging.WARNING, logger="avenza.orchestrator"):
+        assert await o.prewarm_tts() == 5
+    assert len(o.tts.texts) == 6  # five cached, one refused, then it stops
+    assert sum("out of credits" in r.getMessage() for r in caplog.records) == 1
