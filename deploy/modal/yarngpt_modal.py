@@ -43,9 +43,9 @@ WAV_CKPT_NAME = "wavtokenizer_large_speech_320_24k.ckpt"
 def download_weights():
     """Runs once at image build time so cold starts don't re-download anything.
 
-    10 Nov 2026: a rebuild failed with 404 for WAV_CKPT_NAME (the file was renamed or moved in
-    the Hugging Face repo). So every checkpoint in the repo is downloaded and the right one is
-    found by name at start-up (find_wav_ckpt); the names are printed in the build log.
+    10 Nov 2026: a rebuild failed with 404 for WAV_CKPT_NAME: the repo replaced it with
+    wavtokenizer_large_speech_320_v2.ckpt, and a container built with v2 never answered.
+    So the v1 file is fetched from the repo history; v2 is only the last resort.
     """
     import glob
 
@@ -57,7 +57,23 @@ def download_weights():
         "wavtokenizer_mediumdata_frame75_3s_nq1_code4096_dim512_kmeans200_attn.yaml",
         local_dir=WEIGHTS_DIR,
     )
-    snapshot_download(WAV_REPO, local_dir=f"{WEIGHTS_DIR}/wav", allow_patterns=["*.ckpt", "*.pt", "*.bin", "*.safetensors"])
+    # YarnGPT2 was trained with the original (v1) checkpoint. The repo now only has a v2 file at
+    # its latest revision, so fetch v1 from the repo history (newest revision that still has it).
+    from huggingface_hub import list_repo_commits
+    from huggingface_hub.errors import EntryNotFoundError
+
+    got_v1 = False
+    for commit in list_repo_commits(WAV_REPO):
+        try:
+            hf_hub_download(WAV_REPO, WAV_CKPT_NAME, revision=commit.commit_id, local_dir=f"{WEIGHTS_DIR}/wav")
+            print(f"[yarngpt] v1 checkpoint from revision {commit.commit_id[:10]} ({commit.created_at:%Y-%m-%d})")
+            got_v1 = True
+            break
+        except EntryNotFoundError:
+            continue
+    if not got_v1:
+        print("[yarngpt] v1 checkpoint not in the repo history; falling back to whatever the repo has now")
+        snapshot_download(WAV_REPO, local_dir=f"{WEIGHTS_DIR}/wav", allow_patterns=["*.ckpt", "*.pt", "*.bin", "*.safetensors"])
     found = sorted(glob.glob(f"{WEIGHTS_DIR}/wav/**/*", recursive=True))
     print("[yarngpt] WavTokenizer files:", [f for f in found if not f.endswith("/")])
     if not any(f.endswith((".ckpt", ".pt", ".bin", ".safetensors")) for f in found):
