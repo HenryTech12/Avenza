@@ -875,7 +875,12 @@ export async function registerFingerprint(displayName = '', opts: { quiet?: bool
     const owner = existing ? await api.me() : null
     const start = await api.registerOptions({ displayName: name, language: language.value, existing: owner ? { userId: owner.id, deviceToken: deviceToken.value as string } : undefined })
     const res = await enrol(start.options)
-    if (!res.ok) return res.reason
+    if (!res.ok) {
+      if (res.reason === 'error') {
+        enrolError.value = res.detail === 'address' ? t('finger.addressMismatch') : t('finger.errorDetail', { detail: res.detail ?? '' })
+      }
+      return res.reason
+    }
     const v = await api.registerVerify({ challengeId: start.challengeId, credential: res.credential })
     deviceToken.value = v.deviceToken
     if (!consentId.value) await recordConsent()

@@ -155,6 +155,35 @@ def _mount_frontend(app: FastAPI, dist: Path) -> None:
         return FileResponse(root / "index.html", headers={"Cache-Control": "no-cache"})
 
 
+def passkey_address_problem(settings: Settings, origin: str | None, host: str | None) -> str | None:
+    """Why a passkey ceremony from this address cannot work, or None.
+
+    The browser only allows a passkey whose RP ID is the page's host (or a parent
+    domain of it), and the server only accepts origins listed in WEBAUTHN_ORIGIN.
+    """
+    from urllib.parse import urlsplit
+
+    if not origin:
+        return None  # not a browser page (scripts, tests): nothing to check
+    page = urlsplit(origin).hostname or (host or "").split(":")[0]
+    if not page:
+        return None
+    rp_id = settings.webauthn_rp_id.strip().lower()
+    page = page.lower()
+    allowed = [o.strip().rstrip("/") for o in settings.webauthn_origin.split(",") if o.strip()]
+    if not (page == rp_id or page.endswith("." + rp_id)):
+        return (
+            f"Avenza was opened at {page}, but WEBAUTHN_RP_ID is {rp_id or '(empty)'}. "
+            f"Set WEBAUTHN_RP_ID={page} and WEBAUTHN_ORIGIN=https://{page} in .env, then restart Avenza."
+        )
+    if origin and origin.rstrip("/") not in allowed:
+        return (
+            f"Avenza was opened at {origin}, which is not in WEBAUTHN_ORIGIN ({', '.join(allowed) or 'empty'}). "
+            f"Set WEBAUTHN_ORIGIN={origin.rstrip('/')} in .env, then restart Avenza."
+        )
+    return None
+
+
 def verify_forge_signature(raw: bytes, timestamp: str, signature: str, secret: str, now: float | None = None) -> bool:
     """Guide §5.6: sha256=<hex HMAC-SHA256 of "{timestamp}.{raw_body}">, max 5 minutes old."""
     try:
@@ -223,6 +252,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             logger.warning(
                 "ALLOW_DEV_APPROVAL is enabled: fingerprint approval can be bypassed in tests/demo only"
             )
+        from urllib.parse import urlsplit
+
+        for _origin in [o.strip() for o in settings.webauthn_origin.split(",") if o.strip()]:
+            _host = (urlsplit(_origin).hostname or "").lower()
+            _rp = settings.webauthn_rp_id.strip().lower()
+            if _host and not (_host == _rp or _host.endswith("." + _rp)):
+                logger.warning(
+                    "WEBAUTHN_ORIGIN %s does not match WEBAUTHN_RP_ID %s: fingerprint registration from it will fail",
+                    _origin, settings.webauthn_rp_id,
+                )
         if not settings.admin_token:
             logger.warning(
                 "ADMIN_TOKEN is not set: /audit and /dev/bank endpoints only answer requests from this machine"
@@ -450,7 +489,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # Enrolment and consent
     # ------------------------------------------------------------------
     @app.post("/devices/register/options")
-    def register_options(body: RegisterOptionsIn):
+    def register_options(body: RegisterOptionsIn, request: Request):
+        # The phone opened Avenza at one address but the passkey settings name another: the browser
+        # would refuse before showing the fingerprint prompt. Say exactly what to change instead.
+        problem = passkey_address_problem(settings, request.headers.get("origin"), request.headers.get("host"))
+        if problem:
+            logger.warning("fingerprint registration refused: %s", problem)
+            raise HTTPException(status_code=400, detail=problem)
         if not body.user_id and not body.display_name.strip():
             raise HTTPException(status_code=400, detail="display_name is required for a new customer")
         language = body.language if body.language in PROMPTS else "en"

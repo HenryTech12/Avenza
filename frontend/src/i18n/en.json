@@ -255,5 +255,7 @@
   "ob.agree": "I agree",
   "ob.details": "What this means",
   "ob.register": "Register fingerprint",
-  "ob.or": "Or answer here"
+  "ob.or": "Or answer here",
+  "finger.addressMismatch": "Your phone refused to open the fingerprint prompt because this web address does not match Avenza's settings. The person running Avenza needs to set WEBAUTHN_RP_ID and WEBAUTHN_ORIGIN to this address and restart it.",
+  "finger.errorDetail": "Your phone could not register the fingerprint ({detail}). Please try again."
 }
