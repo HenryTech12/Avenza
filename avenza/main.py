@@ -230,9 +230,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         reconciler: asyncio.Task | None = None
         if settings.reconcile_interval_s > 0:
             reconciler = asyncio.create_task(_reconcile_loop())
+        # Fixed prompts are synthesised in the background; startup does not wait.
+        prewarm = asyncio.create_task(orchestrator.prewarm_tts())
         try:
             yield
         finally:
+            prewarm.cancel()
             if reconciler is not None:
                 reconciler.cancel()
                 try:

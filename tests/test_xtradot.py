@@ -118,7 +118,7 @@ async def test_intra_transfer_settles_with_the_bank_verified_name(services, sim)
     assert sent.kind == "intra" and sent.source == "0123456790"
     assert sent.amount_kobo == 500_000 and sent.fee_kobo == 0
     assert t.bank_reference.startswith("AVZ-")
-    assert "Charges" not in prompts_of(done)[-1]["text"]  # intrabank: no fee
+    assert "bank charge" not in prompts_of(done)[-1]["text"]  # intrabank: no fee
 
 
 async def test_interbank_transfer_waits_for_settlement_and_speaks_charges(services, sim):
@@ -127,7 +127,7 @@ async def test_interbank_transfer_waits_for_settlement_and_speaks_charges(servic
     assert states(done) == [TransferState.SETTLED.value]
     text = prompts_of(done)[-1]["text"]
     # Sandbox NIP schedule: ₦10 for amounts up to ₦5,000, plus 7.5% VAT.
-    assert "Charges ₦10.75." in text
+    assert "The bank charge was ₦10.75." in text
     assert posts(sim, "/v1/transfers/interbank/name-enquiry")
     assert len(posts(sim, "/v1/transfers/interbank")) == 1
 
@@ -657,7 +657,7 @@ async def test_ai_yarngpt_tts_returns_audio_end_to_end(monkeypatch):
     monkeypatch.setattr("avenza_ai.providers.yarngpt_tts.httpx.AsyncClient", factory)
     # The misconfiguration seen on the cluster: the ASR socket in the TTS setting.
     tts = AIYarnTTS(Settings().for_test(yarngpt_api_key="sk_x", yarngpt_tts_url="https://api.yarngpt.ai/api/v1/asr/stream"))
-    result = await tts.synthesize("Payment settled.")
+    result = await tts.synthesize("Payment settled. Reference AVZ-1.")
     assert result is not None and not result.is_empty
     assert result.sample_rate == 22050 and len(result.pcm) == 4410 and result.ttfa_ms >= 0
     assert tts.last_error is None
@@ -669,5 +669,5 @@ async def test_ai_yarngpt_tts_returns_audio_end_to_end(monkeypatch):
         "avenza_ai.providers.yarngpt_tts.httpx.AsyncClient",
         lambda *a, **k: real(*a, **{**k, "transport": httpx.MockTransport(failing)}),
     )
-    empty = await tts.synthesize("Payment settled.")
+    empty = await tts.synthesize("Payment settled. Reference AVZ-1.")
     assert empty.is_empty and "QUOTA_EXCEEDED" in tts.last_error

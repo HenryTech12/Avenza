@@ -22,6 +22,21 @@ new tests fail on the previous code, which shows they catch the defects below.
   (up to 4 paid calls).
 - 9 regression tests in `tests/ai/test_providers.py`.
 
+### Probe results (cluster, 10 Nov) and follow-up
+
+- **YarnGPT's minimum is 20 characters** (`422 INPUT_TOO_SHORT`). Shorter text
+  is no longer sent (`MIN_CHARS`); the device voice speaks it. English prompts
+  lengthened: `listening_resume` "I am listening again.", `unlock_success`
+  "Transfers are unlocked now.", `charges` "The bank charge was {charges}."
+  A test keeps every English prompt at 20 characters or more.
+- **First audio takes 3.5-4.6 s for 175 characters** and arrives almost all at
+  once. All 50 fixed English prompts are now synthesised in the background at
+  startup (`TurnOrchestrator.prewarm_tts`, concurrency 2, kept apart from the
+  read-back LRU so they are never evicted). Only read-backs and other prompts
+  with variable parts pay the TTS wait. Settings: `TTS_PREWARM`,
+  `TTS_PREWARM_LANGUAGES`, `TTS_PREWARM_CONCURRENCY`, `TTS_PREWARM_TIMEOUT_S`.
+  Log line: `tts prewarm: N of M fixed prompts cached in S s`.
+
 ## Act now
 
 - **Three live API keys were in `.env.example`** (Groq `LLM_API_KEY`, YarnGPT

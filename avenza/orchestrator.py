@@ -80,6 +80,8 @@ class TurnOrchestrator:
         self.ai = ai
         self.latency = LatencyLog(settings.latency_log or None)
         self._tts_cache: OrderedDict[tuple[str, str], tuple[str, int]] = OrderedDict()
+        # Fixed prompts synthesised at startup; never evicted by read-backs.
+        self._tts_fixed: dict[tuple[str, str], tuple[str, int]] = {}
 
     # ------------------------------------------------------------------
     # Speech output
@@ -105,7 +107,7 @@ class TurnOrchestrator:
             ):
                 continue
             key = (event.get("language") or ctx.language, event["text"])
-            cached = self._tts_cache.get(key)
+            cached = self._tts_fixed.get(key) or self._tts_cache.get(key)
             if cached is None:
                 started = time.perf_counter()
                 try:
@@ -127,10 +129,62 @@ class TurnOrchestrator:
                 self._tts_cache[key] = cached
                 while len(self._tts_cache) > max(1, self.settings.tts_cache_size):
                     self._tts_cache.popitem(last=False)
-            else:
+            elif key in self._tts_cache:
                 self._tts_cache.move_to_end(key)
             event["audio"] = {"encoding": "pcm_s16le", "sample_rate": cached[1], "data": cached[0]}
         return events
+
+    def fixed_prompts(self, languages: list[str]) -> list[tuple[str, str]]:
+        """(language, text) of every prompt with no variable part and no recorded clip."""
+        out: list[tuple[str, str]] = []
+        for language in languages:
+            for prompt_id in self.prompts.all_ids():
+                if not self.prompts.is_fixed(prompt_id, language):
+                    continue
+                prompt = self.prompts.render(prompt_id, language=language)
+                key = (prompt.language, prompt.text)
+                if prompt.audio_url or key in out:
+                    continue
+                out.append(key)
+        return out
+
+    async def prewarm_tts(self) -> int:
+        """Synthesise every fixed prompt once, so a turn only waits for its read-back.
+
+        YarnGPT takes 3.5-4.6 s to deliver a clip (10 Nov 2026), so without this
+        "Thank you. Place your finger on the sensor..." would wait that long on
+        every first use after a deploy. Runs in the background at startup; a
+        prompt that is needed before it is ready is synthesised live as before.
+        Every call spends YarnGPT credits: about one per English prompt per start.
+        """
+        if getattr(self.tts, "simulated", True) or not self.settings.tts_prewarm:
+            return 0
+        languages = [x.strip() for x in self.settings.tts_prewarm_languages.split(",") if x.strip()]
+        todo = [k for k in self.fixed_prompts(languages) if k not in self._tts_fixed]
+        gate = asyncio.Semaphore(max(1, self.settings.tts_prewarm_concurrency))
+        started = time.perf_counter()
+
+        async def one(key: tuple[str, str]) -> bool:
+            async with gate:
+                try:
+                    result = await asyncio.wait_for(
+                        self.tts.synthesize(key[1], language=key[0]),
+                        self.settings.tts_prewarm_timeout_s,
+                    )
+                except Exception as exc:  # noqa: BLE001 - the live path still works
+                    logger.warning("tts prewarm failed for %r: %s", key[1][:40], type(exc).__name__)
+                    return False
+                if result.is_empty:  # under the provider minimum, or no audio
+                    return False
+                self._tts_fixed[key] = (base64.b64encode(result.pcm).decode("ascii"), int(result.sample_rate))
+                return True
+
+        done = sum(await asyncio.gather(*(one(k) for k in todo)))
+        logger.info(
+            "tts prewarm: %d of %d fixed prompts cached in %.1f s",
+            done, len(todo), time.perf_counter() - started,
+        )
+        return done
 
     # ------------------------------------------------------------------
     # Failure safety
