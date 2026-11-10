@@ -1,0 +1,32 @@
+/* High contrast: pure black/white, thicker borders, brighter accent. */
+:root[data-contrast='high'] {
+  --bg: #000000;
+  --surface: #000000;
+  --surface-raised: #000000;
+  --border: #ffffff;
+  --text: #ffffff;
+  --text-muted: #ffffff;
+  --accent: #5fffdc;
+  --on-accent: #000000;
+  --success: #6dff9c;
+  --warning: #ffd34d;
+  --danger: #ff8a8a;
+  --simulated: #dccfff;
+  --border-width: 2px;
+  --shadow: none;
+}
+:root[data-contrast='high'][data-theme='light'],
+:root[data-contrast='high'][data-effective-theme='light'] {
+  --bg: #ffffff;
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --border: #000000;
+  --text: #000000;
+  --text-muted: #000000;
+  --accent: #00604a;
+  --on-accent: #ffffff;
+  --success: #00591f;
+  --warning: #7a3b00;
+  --danger: #8f0000;
+  --simulated: #4a14b8;
+}

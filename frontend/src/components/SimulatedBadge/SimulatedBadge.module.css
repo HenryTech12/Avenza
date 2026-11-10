@@ -1,0 +1,21 @@
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  min-height: 28px;
+  border-radius: var(--radius-pill);
+  color: var(--simulated);
+  border: var(--border-width) solid var(--simulated);
+  background: color-mix(in srgb, var(--simulated) 12%, transparent);
+  font-size: var(--fs-label);
+  font-weight: 700;
+  white-space: nowrap;
+}
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: currentColor;
+  transform: rotate(45deg);
+}

@@ -1,0 +1,39 @@
+{
+  "name": "avenza-web",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "build:mock": "tsc -b && vite build --mode mock",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "e2e": "playwright test"
+  },
+  "dependencies": {
+    "@preact/signals": "^2.11.4",
+    "@ricky0123/vad-web": "^0.0.31",
+    "@simplewebauthn/browser": "^14.0.0",
+    "onnxruntime-web": "^1.31.1",
+    "preact": "^11.1.1",
+    "preact-iso": "^2.12.2",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.14.0",
+    "@fontsource/atkinson-hyperlegible": "^5.3.0",
+    "@playwright/test": "^1.65.0",
+    "@preact/preset-vite": "^2.10.6",
+    "@simplewebauthn/types": "^12.0.0",
+    "@testing-library/preact": "^3.2.6",
+    "@types/node": "^24.19.2",
+    "@vitejs/plugin-basic-ssl": "^2.3.0",
+    "jsdom": "^29.1.1",
+    "typescript": "~7.0.2",
+    "vite": "^8.3.6",
+    "vite-plugin-pwa": "^2.0.0",
+    "vitest": "^5.1.0",
+    "workbox-window": "^7.4.1"
+  }
+}
