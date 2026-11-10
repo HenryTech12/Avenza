@@ -14,7 +14,7 @@ CLIENT_LINES: dict[str, dict[str, str]] = {
         "ob_greeting": "Hello, and welcome to Avenza, your voice bank. I'll get you set up in under a minute.",
         "ob_ask_name": "First, what's your name?",
         "ob_ask_name_again": "Sorry, I didn't catch that. What's your name?",
-        "ob_ask_language": "Which language should I speak: English, Hausa, Igbo or Yoruba?",
+        "ob_ask_language": "Welcome to Avenza. Which language would you like to use? Say English, Hausa, Igbo or Yoruba.",
         "ob_ask_language_again": "Please say English, Hausa, Igbo or Yoruba.",
         "ob_language_set": "Great. I will speak English with you from now on.",
         "ob_consent": "One quick thing. I listen while Avenza is open, and my speech partners process your voice only to understand you. Your voice never moves money: only your fingerprint does. Do you agree?",

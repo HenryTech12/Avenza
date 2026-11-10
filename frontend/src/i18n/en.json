@@ -235,7 +235,7 @@
   "ob.greeting": "Hello, and welcome to Avenza, your voice bank. I'll get you set up in under a minute.",
   "ob.askName": "First, what's your name?",
   "ob.askNameAgain": "Sorry, I didn't catch that. What's your name?",
-  "ob.askLanguage": "Nice to meet you, {name}. Which language should I speak: English, Hausa, Igbo or Yoruba?",
+  "ob.askLanguage": "Welcome to Avenza. Which language would you like to use? Say English, Hausa, Igbo or Yoruba.",
   "ob.askLanguageAgain": "Please say English, Hausa, Igbo or Yoruba.",
   "ob.consent": "One quick thing. I listen while Avenza is open, and my speech partners process your voice only to understand you. Your voice never moves money: only your fingerprint does. Do you agree?",
   "ob.consentAgain": "If you agree, say: I agree.",

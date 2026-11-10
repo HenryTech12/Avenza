@@ -14,7 +14,8 @@ import styles from './Onboarding.module.css'
 
 type Step = 'name' | 'language' | 'consent' | 'finger' | 'done'
 type Line = { who: 'avenza' | 'you'; text: string; id: number }
-const STEPS: Exclude<Step, 'done'>[] = ['name', 'language', 'consent', 'finger']
+// Language first (team decision, 10 Nov): every question after it is in the chosen language.
+const STEPS: Exclude<Step, 'done'>[] = ['language', 'name', 'consent', 'finger']
 
 const problems: Record<Exclude<EnrolOutcome, 'ok'>, string> = {
   cancelled: 'onboard.tapToFinger',
@@ -31,7 +32,7 @@ const problems: Record<Exclude<EnrolOutcome, 'ok'>, string> = {
  */
 export function Onboarding() {
   const { route } = useLocation()
-  const [step, setStep] = useState<Step>('name')
+  const [step, setStep] = useState<Step>('language')
   const [lines, setLines] = useState<Line[]>([])
   const [speaking, setSpeaking] = useState(false)
   const [listening, setListening] = useState(false)
@@ -72,7 +73,7 @@ export function Onboarding() {
     nameRef.current = n
     push('you', n)
     setTyped('')
-    setStep('language')
+    setStep('consent')
     return true
   }
   const answerLanguage = async (code: Lang, said?: string) => {
@@ -80,7 +81,7 @@ export function Onboarding() {
     push('you', said ?? languages.find((l) => l.code === code)?.name ?? code)
     await chooseLanguage(code)
     await sayLine('ob_language_set', 'ob.languageSet') // first line in the new language
-    setStep('consent')
+    setStep('name')
   }
   const answerConsent = async (said?: string) => {
     if (step !== 'consent' || busy) return
@@ -119,6 +120,18 @@ export function Onboarding() {
       else void opts.say(0)
     }
     switch (step) {
+      case 'language':
+        listen({
+          lang: 'en-NG',
+          say: (n) => (n === 0 ? sayLine('ob_ask_language', 'ob.askLanguage') : sayLine('ob_ask_language_again', 'ob.askLanguageAgain')).then(() => undefined),
+          onText: (text) => {
+            const code = languageFrom(text)
+            if (!code) return false
+            void answerLanguage(code, text)
+            return true
+          },
+        })
+        break
       case 'name':
         listen({
           lang: 'en-NG',
@@ -127,18 +140,6 @@ export function Onboarding() {
             await (n === 0 ? sayLine('ob_ask_name', 'ob.askName') : sayLine('ob_ask_name_again', 'ob.askNameAgain'))
           },
           onText: answerName,
-        })
-        break
-      case 'language':
-        listen({
-          lang: 'en-NG',
-          say: (n) => say(n === 0 ? t('ob.askLanguage', { name: nameRef.current }) : t('ob.askLanguageAgain')),
-          onText: (text) => {
-            const code = languageFrom(text)
-            if (!code) return false
-            void answerLanguage(code, text)
-            return true
-          },
         })
         break
       case 'consent':

@@ -11,17 +11,18 @@ async function axe(page: Page, label: string) {
 const heading = (page: Page, name: string) => page.getByRole('heading', { level: 1, name })
 
 test.describe('onboarding', () => {
-  test('conversation: name, language, consent, fingerprint, voice (with axe on each step)', async ({ page }) => {
+  test('conversation: language, name, consent, fingerprint, voice (with axe on each step)', async ({ page }) => {
     await addAuthenticator(page, 'approve')
     await page.goto('/')
     await expect(heading(page, 'Set up Avenza')).toBeAttached({ timeout: 30_000 })
-    await expect(page.getByText(/welcome to Avenza/).first()).toBeVisible({ timeout: 30_000 })
+    // language first (10 Nov): everything after it is in the chosen language
+    await expect(page.getByText(/Which language would you like/).first()).toBeVisible({ timeout: 30_000 })
+    await axe(page, 'onboarding-language')
+    await page.getByRole('button', { name: 'English' }).click()
+    await expect(page.getByLabel('Your name')).toBeVisible()
     await axe(page, 'onboarding-name')
     await page.getByLabel('Your name').fill('Test Customer')
     await page.getByRole('button', { name: 'Continue' }).click()
-    await expect(page.getByRole('button', { name: 'English' })).toBeVisible()
-    await axe(page, 'onboarding-language')
-    await page.getByRole('button', { name: 'English' }).click()
     await expect(page.getByRole('button', { name: 'I agree' })).toBeVisible()
     await axe(page, 'onboarding-consent')
     await page.getByRole('button', { name: 'I agree' }).click()
