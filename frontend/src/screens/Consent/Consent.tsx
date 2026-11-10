@@ -4,7 +4,7 @@ import { BigButton } from '../../components/BigButton/BigButton'
 import { Sheet } from '../../components/Sheet/Sheet'
 import { Icon } from '../../components/Icon/Icon'
 import { audioRunning, giveConsent, speakConsent, stopSpeaking, speakLine, answerLocale } from '../../session/session'
-import { listenFor, isAgreement, voiceAnswersSupported } from '../../audio/listen'
+import { ask, isAgreement, voiceAnswersSupported } from '../../audio/listen'
 import { speechProviders } from '../../config/languages'
 import { t } from '../../i18n'
 import styles from './Consent.module.css'
@@ -24,36 +24,28 @@ export function Consent() {
   // Read the consent aloud as soon as sound is available (audio unlocks on the first tap),
   // then listen for "I agree". The button does the same thing.
   useEffect(() => {
-    let spoke = false
-    let stopListening = () => undefined as void
-    const listen = () => {
-      if (!voiceAnswersSupported()) return
-      setListening(true)
-      stopListening = listenFor(answerLocale(), (text) => {
+    if (!audioRunning.value) return
+    if (!voiceAnswersSupported()) {
+      void speakConsent()
+      return () => stopSpeaking()
+    }
+    const stop = ask({
+      lang: answerLocale(),
+      // the whole consent the first time, then only the question
+      say: async (n) => {
+        if (n === 0) await speakConsent()
+        await speakLine(t('onboard.sayAgree'))
+      },
+      onListening: setListening,
+      onHeard: setHeard,
+      onText: (text) => {
         if (!isAgreement(text) || busyRef.current) return false
         void agree()
         return true
-      }, setHeard)
-    }
-    const speak = () => {
-      if (spoke || !audioRunning.value) return
-      spoke = true
-      setTimeout(async () => {
-        await speakConsent()
-        await speakLine(t('onboard.sayAgree'))
-        listen()
-      }, 300)
-    }
-    speak()
-    const first = () => {
-      // the first tap anywhere unlocks audio on browsers that need a gesture
-      setTimeout(speak, 50)
-    }
-    document.addEventListener('pointerdown', first, { once: true })
+      },
+    })
     return () => {
-      document.removeEventListener('pointerdown', first)
-      stopListening()
-      setListening(false)
+      stop()
       stopSpeaking()
     }
   }, [audioRunning.value])

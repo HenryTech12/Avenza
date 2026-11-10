@@ -4,6 +4,33 @@ All 481 tests pass (415 existing + 66 new in `tests/test_fixes.py`). 51 of the
 new tests fail on the previous code, which shows they catch the defects below.
 
 
+## 10 November 2026: voice only, from opening to payment
+
+Avenza is meant to be used without touching the screen (blind and low-vision
+customers first).
+
+- **Opening**: the prototype's first screen (dawn sky, pearl, "Your voice.
+  Your bank. Always.") for 5 s, then Avenza speaks. Browsers allow sound only
+  after one touch unless Avenza is installed on the home screen; when sound is
+  blocked the whole screen is a single button and screen readers announce
+  "touch anywhere".
+- **Onboarding by voice**: Avenza asks for the language, reads the consent and
+  waits for "I agree", asks the customer's name, then opens the fingerprint
+  prompt itself. Every question is asked again when nothing is heard. If the
+  browser needs a touch before the fingerprint prompt, Avenza says "touch
+  anywhere" and the whole screen is the target.
+- **Voice everywhere**: the microphone stays on across screens. New voice
+  commands: "what is my balance" (bank figure, never invented), "open
+  settings", "go home", "show my transactions" (`navigate` event). A payment
+  always brings the customer back to the main screen. The greeting now says
+  what can be asked.
+- **Languages (beta)**: "speak Yoruba/Hausa/Igbo/English" switches Avenza's
+  replies and the next turn's speech-to-text; Avenza also switches when the
+  words clearly belong to another language (`avenza/langdetect.py`, cautious:
+  several marker words or language-only letters). Hausa, Igbo and Yoruba are
+  marked Beta in the app: the translations are unverified.
+  `LANGUAGE_DETECTION`, `SWITCH_LANGUAGES`, `BETA_LANGUAGES`.
+
 ## 10 November 2026: frontend redesign (prototype)
 
 - **Look**: warm "pearl" theme is the default (dark and high contrast stay in

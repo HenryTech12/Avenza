@@ -24,3 +24,63 @@ describe('spoken onboarding answers', () => {
     expect(nameFrom('Chukwuemeka')).toBe('Chukwuemeka')
   })
 })
+
+describe('ask: question, listen, ask again', () => {
+  it('asks again when nothing usable is heard, then stops once the answer comes', async () => {
+    const { ask } = await import('./listen')
+    const heardSequence = ['', 'hmm', 'Yoruba please']
+    let starts = 0
+    class FakeRec {
+      lang = ''; continuous = false; interimResults = false; maxAlternatives = 1
+      onresult: ((e: unknown) => void) | null = null
+      onend: (() => void) | null = null
+      onerror: ((e: unknown) => void) | null = null
+      start() {
+        const text = heardSequence[Math.min(starts++, heardSequence.length - 1)]
+        setTimeout(() => {
+          if (text) this.onresult?.({ results: [[{ transcript: text }]] })
+          this.onend?.()
+        }, 1)
+      }
+      stop() {}
+      abort() {}
+    }
+    ;(globalThis as unknown as { webkitSpeechRecognition: unknown }).webkitSpeechRecognition = FakeRec
+    const said: number[] = []
+    let answer = ''
+    await new Promise<void>((done) => {
+      ask({
+        lang: 'en-NG',
+        say: async (n) => { said.push(n) },
+        onText: (t) => {
+          if (!/yoruba/i.test(t)) return false
+          answer = t
+          done()
+          return true
+        },
+      })
+    })
+    expect(answer).toBe('Yoruba please')
+    expect(said[0]).toBe(0)
+    delete (globalThis as unknown as { webkitSpeechRecognition?: unknown }).webkitSpeechRecognition
+  })
+
+  it('gives up after the last try so the screen can fall back', async () => {
+    const { ask } = await import('./listen')
+    class SilentRec {
+      lang = ''; continuous = false; interimResults = false; maxAlternatives = 1
+      onresult = null; onerror = null
+      onend: (() => void) | null = null
+      start() { setTimeout(() => this.onend?.(), 1) }
+      stop() {}
+      abort() {}
+    }
+    ;(globalThis as unknown as { webkitSpeechRecognition: unknown }).webkitSpeechRecognition = SilentRec
+    const said: number[] = []
+    await new Promise<void>((done) => {
+      ask({ lang: 'en-NG', tries: 2, say: async (n) => { said.push(n) }, onText: () => false, onGiveUp: done })
+    })
+    expect(said).toEqual([0, 1]) // asked, then asked again, then gave up
+    delete (globalThis as unknown as { webkitSpeechRecognition?: unknown }).webkitSpeechRecognition
+  })
+})

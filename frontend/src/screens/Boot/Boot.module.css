@@ -1,47 +1,107 @@
-.boot {
-  justify-content: center;
+/* Prototype screen 1: dawn sky, a pearl over still water, the wordmark and tagline. */
+.splash {
+  position: relative;
+  width: 100%;
+  max-width: var(--max-width);
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  padding: calc(var(--space-8) + env(safe-area-inset-top)) var(--space-3) calc(var(--space-6) + env(safe-area-inset-bottom));
+  overflow: hidden;
+  isolation: isolate;
+  border: 0;
+  color: #1c2230;
+  font: inherit;
+  text-align: center;
+  background: none;
+  animation: appear 400ms var(--ease);
+}
+.sky {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background:
+    radial-gradient(120% 60% at 50% 46%, rgb(255 236 214 / 0.95) 0%, rgb(255 236 214 / 0) 60%),
+    linear-gradient(180deg, #ece6ef 0%, #f3e6dc 38%, #e9d9cf 55%, #c9cfdd 56%, #b8c2d4 75%, #9eabc2 100%);
+}
+.top,
+.pearl,
+.foot {
+  position: relative;
+  z-index: 1;
+}
+.top {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+}
+.tagline {
+  font-size: var(--fs-body);
+  color: #2c3a4f;
+}
+.pearl {
+  width: 190px;
+  height: 190px;
+  border-radius: 50%;
+  background: var(--pearl);
+  box-shadow: var(--pearl-glow);
+  animation: breathe 4s ease-in-out infinite;
+}
+.reflection {
+  position: absolute;
+  left: 50%;
+  top: 112%;
+  width: 150px;
+  height: 46px;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background: radial-gradient(ellipse at center, rgb(255 246 236 / 0.75) 0%, rgb(255 246 236 / 0) 70%);
+  filter: blur(4px);
+}
+.foot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  color: #ffffff;
+  text-shadow: 0 1px 6px rgb(30 40 60 / 0.45);
+  font-size: var(--fs-body);
 }
 .bar {
-  width: 160px;
-  height: 4px;
+  margin-top: var(--space-2);
+  width: 120px;
+  height: 3px;
   border-radius: 2px;
-  background: var(--border);
+  background: rgb(255 255 255 / 0.35);
   overflow: hidden;
 }
 .fill {
   display: block;
   height: 100%;
-  background: var(--accent);
+  background: #ffffff;
   border-radius: 2px;
   transition: width 200ms var(--ease);
 }
-.tap {
-  width: 100%;
-  min-height: 100dvh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-3);
-  background: var(--bg);
-  border: 0;
-  color: var(--text);
-  padding: var(--space-3);
-  animation: appear 250ms var(--ease);
-}
 .tapText {
-  margin-top: var(--space-4);
-  font-size: var(--fs-status);
+  font-size: var(--fs-sub);
   font-weight: 700;
-  padding: var(--space-2) var(--space-4);
+  padding: var(--space-1) var(--space-3);
   border-radius: var(--radius-pill);
-  background: var(--accent);
-  color: var(--on-accent);
+  background: rgb(28 34 48 / 0.82);
+  color: #ffffff;
+  text-shadow: none;
 }
 .tapHint {
-  color: var(--text-muted);
+  max-width: 30ch;
 }
 @keyframes appear {
   from { opacity: 0; }
   to { opacity: 1; }
+}
+@keyframes breathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.03); }
 }

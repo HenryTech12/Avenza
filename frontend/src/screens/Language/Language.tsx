@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'preact/hooks'
 import { useLocation } from 'preact-iso'
 import { languages, chooseLanguage, language, audioRunning, speakLine } from '../../session/session'
-import { listenFor, languageFrom, voiceAnswersSupported } from '../../audio/listen'
+import { ask, languageFrom, voiceAnswersSupported } from '../../audio/listen'
 import { Icon } from '../../components/Icon/Icon'
 import { t } from '../../i18n'
 import type { Lang } from '../../protocol/messages'
@@ -26,22 +26,17 @@ export function Language() {
   // Onboarding by voice: Avenza asks, the customer says the language. Tapping a tile still works.
   useEffect(() => {
     if (!audioRunning.value || !voiceAnswersSupported()) return
-    let alive = true
-    let stop = () => undefined as void
-    void speakLine(t('onboard.askLanguage')).then(() => {
-      if (!alive) return
-      setListening(true)
-      stop = listenFor('en-NG', (text) => {
+    return ask({
+      lang: 'en-NG',
+      say: () => speakLine(t('onboard.askLanguage')),
+      onListening: setListening,
+      onText: (text) => {
         const code = languageFrom(text)
         if (!code) return false
         void pick(code)
         return true
-      })
+      },
     })
-    return () => {
-      alive = false
-      stop()
-    }
   }, [audioRunning.value])
 
   return (

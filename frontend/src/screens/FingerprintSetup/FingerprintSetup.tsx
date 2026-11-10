@@ -3,7 +3,7 @@ import { useLocation } from 'preact-iso'
 import { BigButton } from '../../components/BigButton/BigButton'
 import { Icon } from '../../components/Icon/Icon'
 import { registerFingerprint, enrolError, deviceToken, audioRunning, speakLine, answerLocale, type EnrolOutcome } from '../../session/session'
-import { listenFor, nameFrom, voiceAnswersSupported } from '../../audio/listen'
+import { ask, nameFrom, voiceAnswersSupported } from '../../audio/listen'
 import { t } from '../../i18n'
 import styles from './FingerprintSetup.module.css'
 
@@ -27,38 +27,40 @@ export function FingerprintSetup() {
   useEffect(() => heading.current?.focus({ preventScroll: true }), [])
 
   // Voice onboarding: ask for the name, fill it in from the answer, then open the fingerprint prompt.
-  // Typing and the button still work; a browser that refuses to open the prompt without a tap just waits for it.
+  // If the browser will only open it after a touch, Avenza says so and the whole screen becomes the target.
+  const [needTouch, setNeedTouch] = useState(false)
   useEffect(() => {
+    if (!audioRunning.value) return
     if (deviceToken.value) {
-      void speakLine(t('onboard.fingerSay'))
+      void speakLine(t('onboard.fingerSay')).then(() => register('', true))
       return
     }
-    if (!voiceAnswersSupported() || !audioRunning.value) return
-    let stop = () => undefined as void
+    if (!voiceAnswersSupported()) return
     let alive = true
-    void (async () => {
-      await speakLine(t('onboard.askName'))
-      if (!alive) return
-      setListening(true)
-      stop = listenFor(answerLocale(), (text) => {
+    const stop = ask({
+      lang: answerLocale(),
+      say: (n) => speakLine(n === 0 ? t('onboard.askName') : t('onboard.noName')),
+      onListening: setListening,
+      onText: (text) => {
         const heardName = nameFrom(text)
         if (heardName.length < 2) return false
         setName(heardName)
-        setListening(false)
-        void speakLine(t('onboard.nameHeard', { name: heardName })).then(() => { if (alive) void register(heardName, true) })
+        void speakLine(t('onboard.nameHeard', { name: heardName })).then(() => {
+          if (alive) void register(heardName, true)
+        })
         return true
-      })
-    })()
+      },
+    })
     return () => {
       alive = false
       stop()
-      setListening(false)
     }
-  }, [])
+  }, [audioRunning.value])
 
   const register = async (who = name, automatic = false) => {
     setBusy(true)
     setProblem(null)
+    setNeedTouch(false)
     const r = await registerFingerprint(who)
     setBusy(false)
     if (r === 'ok') {
@@ -67,9 +69,14 @@ export function FingerprintSetup() {
     } else if (r === 'already-registered') {
       setDone(true)
       setTimeout(() => route('/', true), 600)
-    } else if (!(automatic && r === 'cancelled')) {
-      // an automatic prompt the browser refused (no tap yet) is not an error: the button is right there
+    } else if (automatic && r === 'cancelled') {
+      // The browser refused to open the prompt without a touch (or it was dismissed):
+      // say what to do, and make the whole screen the place to touch.
+      setNeedTouch(true)
+      void speakLine(t('onboard.tapToFinger'))
+    } else {
       setProblem(r)
+      void speakLine(r === 'error' && enrolError.value ? enrolError.value : t(messages[r]))
     }
   }
 
@@ -113,6 +120,11 @@ export function FingerprintSetup() {
             {problem === 'cancelled' || problem === 'error' ? t('common.retry') : t('finger.register')}
           </BigButton>
         </div>
+      ) : null}
+      {needTouch && !done ? (
+        <button type="button" class={styles.touchAnywhere} onClick={() => void register()} aria-label={t('onboard.tapToFingerLabel')}>
+          <span>{t('onboard.tapToFinger')}</span>
+        </button>
       ) : null}
     </main>
   )

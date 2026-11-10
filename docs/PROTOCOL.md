@@ -166,6 +166,9 @@ Used by browser speech recognition or the typed demo fallback.
 | `approval.request` | Fingerprint is required | `transfer_id`, `options`, `transfer`, `expires_in_s` |
 | `history.data` | A history query ran | `period`, `transactions` (each with `source`: `avenza` or `bank`), `bank_history` |
 | `lock.changed` | Emergency lock changed | `locked`, `reason` |
+| `navigate` | The customer asked to go somewhere ("open settings", "go home", "show my transactions") | `screen`: `home`, `history` or `settings` |
+| `balance` | "What is my balance?" answered from the bank (never sent if the bank gave no figure) | `available_kobo`, `available_display` |
+| `language.changed` | The customer asked for a language ("speak Yoruba") or (beta) Avenza detected one; replies and the next turn's speech-to-text use it | `language`, `previous`, `beta`, `reason` (`asked` or `detected`) |
 | `error` | A turn was refused | `code`, `prompt_id`, `message` |
 | `pong` | Reply to `ping` | — |
 | `audio.stream` | Live TTS audio outside a prompt. The client queues it with prompts. | `data` (base64 PCM s16le), `sample_rate` |

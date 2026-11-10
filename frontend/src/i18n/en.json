@@ -12,7 +12,7 @@
   "common.simulatedLabel": "This app is connected to a simulated bank. No real money moves.",
   "boot.loading": "Getting Avenza ready",
   "boot.tap": "Tap anywhere to start",
-  "boot.tapHint": "Avenza needs one tap to turn on sound.",
+  "boot.tapHint": "Touch the screen once, anywhere, so Avenza can speak. You only do this once.",
   "boot.failed": "Avenza could not finish loading",
   "boot.failedBody": "Check your connection and try again. Your money has not moved.",
   "language.title": "Choose your language",
@@ -210,7 +210,7 @@
   "success.body": "You've successfully sent {amount} to {name}.",
   "success.date": "Date and time",
   "onboard.listening": "Listening for \"I agree\"",
-  "onboard.sayAgree": "Say \"I agree\", or tap the button.",
+  "onboard.sayAgree": "If you agree, say: I agree.",
   "onboard.heard": "Heard: \"{text}\"",
   "onboard.fingerSay": "Place your finger on the sensor when your phone asks.",
   "onboard.askName": "What name should I call you? Say your name.",
@@ -221,5 +221,12 @@
   "lang.beta": "Beta",
   "lang.betaLabel": "{name} is in beta: Avenza's words in this language have not been checked by a native speaker yet.",
   "onboard.askLanguage": "Welcome to Avenza. Which language would you like to use? English, Hausa, Igbo or Yoruba?",
-  "onboard.sayLanguage": "Say the language you want, or tap it."
+  "onboard.sayLanguage": "Say the language you want, or tap it.",
+  "splash.tagline": "Your voice. Your bank. Always.",
+  "splash.foot1": "Banking for everyone.",
+  "splash.foot2": "Accessible. Simple. Secure.",
+  "boot.tapLabel": "Start Avenza. Touch anywhere on the screen once so Avenza can speak to you.",
+  "onboard.tapToFinger": "Touch anywhere on the screen, then place your finger on the sensor.",
+  "onboard.tapToFingerLabel": "Register your fingerprint. Touch anywhere on the screen, then place your finger on the sensor.",
+  "onboard.noName": "I did not catch your name. Please say it again."
 }

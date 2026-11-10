@@ -27,15 +27,30 @@ export const voiceAnswersSupported = () => ctor() !== null
  * Listen until `onText` returns true, the caller stops it, or it gives up (about a minute).
  * Returns a stop function. Errors such as "no microphone" or "not allowed" end it quietly.
  */
-export function listenFor(language: string, onText: (text: string) => boolean, onHeard?: (text: string) => void): () => void {
+export function listenFor(
+  language: string,
+  onText: (text: string) => boolean,
+  onHeard?: (text: string) => void,
+  opts: { rounds?: number; onGiveUp?: () => void } = {},
+): () => void {
   const C = ctor()
   if (!C) return () => undefined
   let lang = language
   let stopped = false
   let rounds = 0
   let rec: Rec | null = null
+  const maxRounds = opts.rounds ?? 8
+  let matched = false
+  const giveUp = () => {
+    if (!matched) opts.onGiveUp?.()
+  }
   const run = () => {
-    if (stopped || rounds++ > 8) return
+    if (stopped) return
+    if (rounds++ >= maxRounds) {
+      stopped = true
+      giveUp()
+      return
+    }
     rec = new C()
     rec.lang = lang
     rec.continuous = false
@@ -44,10 +59,16 @@ export function listenFor(language: string, onText: (text: string) => boolean, o
     rec.onresult = (e) => {
       const alts = Array.from(e.results[e.results.length - 1] ?? []).map((a) => a.transcript.trim()).filter(Boolean)
       if (alts[0]) onHeard?.(alts[0])
-      if (alts.some((a) => onText(a))) stop()
+      if (alts.some((a) => onText(a))) {
+        matched = true
+        stop()
+      }
     }
     rec.onerror = (e) => {
-      if (e.error === 'not-allowed' || e.error === 'service-not-allowed' || e.error === 'audio-capture') stopped = true
+      if (e.error === 'not-allowed' || e.error === 'service-not-allowed' || e.error === 'audio-capture') {
+        stopped = true
+        giveUp()
+      }
       // Browsers without a Yoruba/Hausa/Igbo recogniser: listen in Nigerian English instead
       if (e.error === 'language-not-supported' && lang !== 'en-NG') lang = 'en-NG'
     }
@@ -58,6 +79,7 @@ export function listenFor(language: string, onText: (text: string) => boolean, o
       rec.start()
     } catch {
       stopped = true
+      giveUp()
     }
   }
   const stop = () => {
@@ -104,4 +126,42 @@ export function nameFrom(text: string): string {
     .slice(0, 4)
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
     .join(' ')
+}
+
+/**
+ * Ask a question out loud and listen for the answer; ask again when nothing usable is heard.
+ * `say(n)` speaks the question (n = 0 the first time, so a long text can be shortened on repeats).
+ * Returns a stop function. `onGiveUp` runs after the last try (the screen's buttons remain).
+ */
+export function ask(opts: {
+  lang: string
+  say: (attempt: number) => Promise<void>
+  onText: (text: string) => boolean
+  onHeard?: (text: string) => void
+  onListening?: (on: boolean) => void
+  tries?: number
+  onGiveUp?: () => void
+}): () => void {
+  let stopped = false
+  let stopListening: () => void = () => undefined
+  const cycle = async (n: number) => {
+    await opts.say(n)
+    if (stopped) return
+    opts.onListening?.(true)
+    stopListening = listenFor(opts.lang, opts.onText, opts.onHeard, {
+      rounds: 3,
+      onGiveUp: () => {
+        opts.onListening?.(false)
+        if (stopped) return
+        if (n + 1 < (opts.tries ?? 4)) void cycle(n + 1)
+        else opts.onGiveUp?.()
+      },
+    })
+  }
+  void cycle(0)
+  return () => {
+    stopped = true
+    stopListening()
+    opts.onListening?.(false)
+  }
 }

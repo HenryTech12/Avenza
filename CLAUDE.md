@@ -96,6 +96,16 @@ override the ConfigMap) and uses the `regcred` pull secret automatically.
 - LLM: Groq for testing (LLM_ lines in `.env.forge`); **Demo Day uses Huawei MaaS**
   (`glm-5.2`, thinking off): delete the LLM_ lines from `.env.forge` and redeploy.
 
+## How Avenza is used (product rule, 10 Nov)
+
+Voice only, nothing to type or find: splash 5 s, then Avenza talks; onboarding
+(language, consent "I agree", name, fingerprint) is asked and answered by voice;
+the mic stays on on every screen; "open settings", "what is my balance", "speak
+Yoruba" work by voice. The only touches a browser can force are the first touch
+for sound (not needed once installed on the home screen) and, on some browsers,
+one before the fingerprint prompt; both make the whole screen the target.
+Hausa/Igbo/Yoruba are beta (unverified translations, speech-to-text untested).
+
 ## Open issues (as of 10 Nov 2026, morning)
 
 0. **YarnGPT credits ran out** (10 Nov 09:50; new account key added later that day, after deploying `sha-dd2a0de`): 18 credits left,

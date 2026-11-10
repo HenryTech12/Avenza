@@ -10,7 +10,7 @@ PROMPTS: dict[str, dict[str, str]] = {
     "en": {
         "listening": "Listening. Say what you want to do.",
         "listening_resume": "I am listening again.",
-        "session_ready": "Avenza is ready. Say a payment request.",
+        "session_ready": "Avenza is ready. You can send money, check your balance, or hear your recent transactions. What would you like to do?",
         "ask_amount": "How much do you want to send?",
         "ask_account": "Which account number should I send to?",
         "ask_bank": "Which bank is that account with?",
