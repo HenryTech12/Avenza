@@ -200,7 +200,7 @@ def test_yarngpt_asr_stream_against_a_documented_server():
     assert seen["start"]["audio"]["sample_rate"] == 16000 and seen["audio"] == len(PCM)
 
 
-def _intron_server(seen, *, refuse=False):
+def _intron_server(seen, *, refuse=False, early_commit=None):
     """A fake Intron Sahara stream that enforces the documented rules."""
     import base64
 
@@ -227,6 +227,9 @@ def _intron_server(seen, *, refuse=False):
                 await ws.send(json.dumps({"message_type": "AUDIO_CHUNK_ACK", "chunk_id": len(seen["chunks"])}))
                 if len(seen["chunks"]) == 1:
                     await ws.send(json.dumps({"message_type": "PARTIAL_TRANSCRIPT", "transcript": "send five"}))
+                    if early_commit:  # Sahara commits mid-utterance on its own, as on the cluster
+                        await ws.send(json.dumps({"message_type": "COMMITTED_TRANSCRIPT", "transcript_id": "t0",
+                                                  "transcript_text": early_commit}))
             elif msg["message_type"] == "COMMIT":
                 await ws.send(json.dumps({"message_type": "COMMITTED_TRANSCRIPT", "transcript_id": "t1",
                                           "transcript_text": "send five thousand naira abeg", "audio_len": 1.0}))
@@ -253,6 +256,43 @@ def test_sahara_follows_intron_streaming_protocol():
     assert seen["auth"] == "Bearer ik"
     assert "use_language_asr_input=en" in seen["path"] and "sample_rate=16000" in seen["path"]
     assert sum(seen["chunks"]) >= len(PCM) * 3 and all(1024 <= c <= 32768 for c in seen["chunks"])
+
+
+def test_sahara_commits_are_cumulative_so_the_last_one_wins():
+    """Cluster, 10 Nov: two commits were joined into one doubled, garbled request."""
+    from websockets.asyncio.server import serve
+
+    from avenza.config import Settings
+    from avenza.providers.ai_speech import AIWebSocketSTT
+
+    early = "send five thousand to account 0100010001000"
+
+    async def main():
+        seen_batch, seen_live = {}, {}
+        async with serve(_intron_server(seen_batch, early_commit=early), "127.0.0.1", 0) as a, \
+                serve(_intron_server(seen_live, early_commit=early), "127.0.0.1", 0) as b:
+            batch = await SaharaSTTProvider(url=f"ws://127.0.0.1:{a.sockets[0].getsockname()[1]}/stt/v1/stream",
+                                            api_key="ik").transcribe(PCM * 3, "en", 16000, chunk_ms=20)
+            settings = Settings().for_test(
+                stt_provider="ai", ai_stt_choice="en=sahara", sahara_api_key="ik",
+                sahara_asr_url=f"ws://127.0.0.1:{b.sockets[0].getsockname()[1]}/stt/v1/stream",
+            )
+            live = AIWebSocketSTT(settings).stream("en", 16000)
+            partials = []
+
+            async def on_partial(text):
+                partials.append(text)
+
+            live.on_partial = on_partial
+            audio = PCM * 3
+            for i in range(0, len(audio), 640):
+                await live.push(audio[i : i + 640])
+            return batch, await live.end(), partials
+
+    batch, live, partials = run(main())
+    assert batch.text == "send five thousand naira abeg"
+    assert live.text == "send five thousand naira abeg" and live.provider == "ai:sahara"
+    assert early in partials and all("abeg" not in p or early not in p for p in partials)
 
 
 def test_sahara_short_tail_is_padded_not_dropped():

@@ -4,6 +4,17 @@ All 481 tests pass (415 existing + 66 new in `tests/test_fixes.py`). 51 of the
 new tests fail on the previous code, which shows they catch the defects below.
 
 
+## 10 November 2026: Sahara transcripts doubled
+
+Latency probe on the cluster: Sahara sends a mid-utterance
+`COMMITTED_TRANSCRIPT` and then a full one after our COMMIT, each covering the
+whole session. Both were joined, giving "Send ₦5k to GTBank account
+0100010001000. Send ₦5k to GTBank account 0123987001." and, in another turn,
+a false name-mismatch warning ("I heard extradition"). Sahara is now marked
+`cumulative_finals`, and the live path (`ai_speech`) honours that flag as the
+batch path already did: the last commit wins. Regression test in
+`tests/ai/test_providers.py` (fails on the old code).
+
 ## 10 November 2026: YarnGPT TTS stall (open issue 1)
 
 - **The 422 reason was dropped.** YarnGPT puts it in `error.details` (and some

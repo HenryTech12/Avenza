@@ -307,7 +307,11 @@ class SaharaSTTProvider(_GenericWSProvider):
 
     name = "sahara"
     prefix = "SAHARA"
-    cumulative_finals = False
+    # Each COMMITTED_TRANSCRIPT covers the whole session so far. Seen on the
+    # cluster (10 Nov 2026): a mid-utterance commit "Send N5k to GTBank account
+    # 0100010001000." followed by the full "Send N5k to GTBank account 0123987001.";
+    # joining them doubled the request and invented a name mismatch. Take the last.
+    cumulative_finals = True
     MIN_CHUNK = 1024
     TARGET_CHUNK = 8000  # 0.25 s at 16 kHz, as in Intron's example
     MAX_CHUNK = 32 * 1024
