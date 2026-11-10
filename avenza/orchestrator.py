@@ -16,7 +16,7 @@ from .langdetect import detect_language
 from .latency import LatencyLog, Turn
 from .money import format_naira
 from .parser import ParseError, extract_transfer_fields, normalize, parse_history_query
-from .prompts import PROMPTS, PromptLibrary
+from .prompts import PROMPTS, PromptLibrary, period_text, status_text
 from .services import DraftActive, SessionService, TransferLocked, TransferService
 from .state_machine import TransferState, display_state
 from .timeutil import utcnow
@@ -1287,8 +1287,9 @@ class TurnOrchestrator:
                 "bank_history": bank_ok,
             }
         ]
+        period = period_text(query.label, ctx.language)
         if not items:
-            events.append(self._prompt(ctx, "history_empty", period=query.label))
+            events.append(self._prompt(ctx, "history_empty", period=period))
             events.append(self._listening())
             return events
 
@@ -1304,35 +1305,55 @@ class TurnOrchestrator:
                 amount = int(receipt.get("amount_kobo") or latest["amount_kobo"])
                 recipient = receipt.get("recipient_name") or latest["recipient"]
                 status = str(receipt.get("status") or latest["state"])
-                status_text = display_state(status) if status in TransferState.__members__ else status.title()
+                english = display_state(status) if status in TransferState.__members__ else status.title()
             else:
                 amount, recipient = latest["amount_kobo"], latest["recipient"]
-                status_text = latest.get("display") or latest["state"]
+                status = str(latest["state"])
+                english = latest.get("display") or latest["state"]
+            spoken_status = status_text(status, english, ctx.language)
             events.append(
                 self._prompt(
                     ctx,
                     "receipt",
                     amount_display=format_naira(amount),
                     recipient=recipient,
-                    status=status_text,
+                    status=spoken_status,
                     reference=latest.get("reference") or "not available",
                 )
             )
             events.append(self._listening())
             return events
 
-        settled_total = sum(i["amount_kobo"] for i in items if i["state"] == TransferState.SETTLED.value)
         latest = items[0]
-        summary = (
-            f"{format_naira(settled_total)} settled. Latest: {latest['recipient']} "
-            f"{format_naira(latest['amount_kobo'])}."
-        )
+        if query.limit == 1:
+            # "What was my last transaction?": one clear sentence, not a one-item summary
+            events.append(
+                self._prompt(
+                    ctx,
+                    "last_transaction",
+                    amount_display=format_naira(latest["amount_kobo"]),
+                    recipient=latest["recipient"],
+                    when=_spoken_when(latest.get("created_at"), ctx.language),
+                    status=status_text(str(latest["state"]), latest.get("display") or str(latest["state"]), ctx.language),
+                )
+            )
+            events.append(self._listening())
+            return events
+
+        settled_total = sum(i["amount_kobo"] for i in items if i["state"] == TransferState.SETTLED.value)
+        summary = self.prompts.render(
+            "history_detail",
+            language=ctx.language,
+            settled=format_naira(settled_total),
+            amount=format_naira(latest["amount_kobo"]),
+            recipient=latest["recipient"],
+        ).text
         events.append(
             self._prompt(
                 ctx,
                 "history_summary",
                 count=len(items),
-                period=query.label,
+                period=period,
                 summary=summary,
             )
         )
@@ -1413,6 +1434,21 @@ FAILURE_REASONS = {
     "not_received_by_bank": "The bank never received it.",
     "bank_declined": "The bank declined it.",
 }
+
+
+def _spoken_when(created_at: str | None, language: str) -> str:
+    """When a transfer happened, in Lagos time: "10 Nov, 9:40 PM" (English) or "10/11/2026, 21:40"."""
+    from datetime import datetime, timedelta
+
+    if not created_at:
+        return ""
+    try:
+        t = datetime.fromisoformat(created_at.replace("Z", "+00:00")).replace(tzinfo=None) + timedelta(hours=1)
+    except ValueError:
+        return ""
+    if language == "en":
+        return f"{t.day} {t:%b}, {t:%I:%M %p}".replace(" 0", " ")
+    return f"{t.day}/{t.month}/{t.year}, {t:%H:%M}"
 
 
 def _charges_kobo(bank_status: dict | None) -> int:

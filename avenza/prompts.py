@@ -304,6 +304,94 @@ for _lang, _lines in _FILL.items():
         PROMPTS[_lang].setdefault(_k, _v)
 
 
+# History by voice in every language (10 Nov): the details and the time period used to be
+# English inside the localized reply. Hausa/Igbo/Yoruba are unverified (beta).
+_HISTORY_LINES: dict[str, dict[str, str]] = {
+    "en": {
+        "history_detail": "{settled} settled. The latest was {amount} to {recipient}.",
+        "last_transaction": "Your last transaction was {amount_display} to {recipient} on {when}. Status: {status}.",
+    },
+    "yo": {
+        "history_detail": "{settled} ti dé. Èyí tó kẹ́yìn ni {amount} sí {recipient}.",
+        "last_transaction": "Ìsanwó yín tó kẹ́yìn ni {amount_display} sí {recipient} ní {when}. Ipò: {status}.",
+    },
+    "ha": {
+        "history_detail": "{settled} ya kammala. Na ƙarshe shi ne {amount} zuwa {recipient}.",
+        "last_transaction": "Ma'amalarka ta ƙarshe ita ce {amount_display} zuwa {recipient} a {when}. Matsayi: {status}.",
+    },
+    "ig": {
+        "history_detail": "{settled} gara nke ọma. Nke ikpeazụ bụ {amount} nye {recipient}.",
+        "last_transaction": "Azụmahịa gị ikpeazụ bụ {amount_display} nye {recipient} na {when}. Ọnọdụ: {status}.",
+    },
+    "pcm": {
+        "history_detail": "{settled} don land. The last one na {amount} to {recipient}.",
+        "last_transaction": "Your last transaction na {amount_display} to {recipient} on {when}. Status: {status}.",
+    },
+}
+for _lang, _lines in _HISTORY_LINES.items():
+    PROMPTS[_lang].update(_lines)
+
+_PERIOD_WORDS: dict[str, dict[str, str]] = {
+    "yo": {"today": "òní", "yesterday": "àná", "day before yesterday": "íjẹta", "this week": "ọ̀sẹ̀ yìí",
+           "last week": "ọ̀sẹ̀ tó kọjá", "this month": "oṣù yìí", "last month": "oṣù tó kọjá",
+           "this year": "ọdún yìí", "last year": "ọdún tó kọjá"},
+    "ha": {"today": "yau", "yesterday": "jiya", "day before yesterday": "shekaranjiya", "this week": "wannan makon",
+           "last week": "makon da ya gabata", "this month": "wannan watan", "last month": "watan da ya gabata",
+           "this year": "wannan shekarar", "last year": "shekarar da ta gabata"},
+    "ig": {"today": "taa", "yesterday": "ụnyaahụ", "day before yesterday": "ụbọchị abụọ gara aga", "this week": "izu a",
+           "last week": "izu gara aga", "this month": "ọnwa a", "last month": "ọnwa gara aga",
+           "this year": "afọ a", "last year": "afọ gara aga"},
+}
+_UNITS = {
+    "yo": {"day": "ọjọ́", "week": "ọ̀sẹ̀", "month": "oṣù", "ago": "{unit} {n} sẹ́yìn", "last": "{unit} {n} tó kọjá", "since": "láti {x}"},
+    "ha": {"day": "kwanaki", "week": "makonni", "month": "watanni", "ago": "{unit} {n} da suka wuce", "last": "{unit} {n} da suka gabata", "since": "tun daga {x}"},
+    "ig": {"day": "ụbọchị", "week": "izu", "month": "ọnwa", "ago": "{unit} {n} gara aga", "last": "{unit} {n} gara aga", "since": "kemgbe {x}"},
+}
+
+
+def period_text(label: str, language: str) -> str:
+    """The history period ("last week", "3 days ago", "the last 30 days") in the customer's language."""
+    import re
+
+    if language not in _UNITS:
+        return label
+    plain = label.strip().lower()
+    if plain in _PERIOD_WORDS[language]:
+        return _PERIOD_WORDS[language][plain]
+    u = _UNITS[language]
+    m = re.fullmatch(r"(\d+) days? ago", plain)
+    if m:
+        return u["ago"].format(unit=u["day"], n=m.group(1))
+    m = re.fullmatch(r"(?:the )?last (\d+) (day|week|month)s?", plain)
+    if m:
+        return u["last"].format(unit=u[m.group(2)], n=m.group(1))
+    m = re.fullmatch(r"since (\w+)", plain)
+    if m:
+        return u["since"].format(x=m.group(1).title())
+    return label  # month and weekday names are said as they are
+
+
+_STATUS_WORDS: dict[str, dict[str, str]] = {
+    "yo": {"SETTLED": "ó ti dé", "FAILED": "kò ṣeé ṣe", "PENDING": "ó ṣì ń dúró", "CANCELLED": "a fagilé e",
+           "REVERSED": "a dá a padà", "EXPIRED": "àkókò rẹ̀ ti parí"},
+    "ha": {"SETTLED": "an kammala", "FAILED": "bai yi nasara ba", "PENDING": "yana jira", "CANCELLED": "an soke",
+           "REVERSED": "an mayar", "EXPIRED": "lokacinsa ya ƙare"},
+    "ig": {"SETTLED": "ọ gara nke ọma", "FAILED": "ọ dabeghị", "PENDING": "ọ ka na-echere", "CANCELLED": "akagburu ya",
+           "REVERSED": "eweghachiri ya", "EXPIRED": "oge ya agwụla"},
+}
+
+
+def status_text(state: str, english: str, language: str) -> str:
+    """A transfer's status in the customer's language; ``english`` is the English wording."""
+    words = _STATUS_WORDS.get(language)
+    if not words:
+        return english
+    key = (state or "").upper()
+    if key in {"SETTLED", "FAILED", "CANCELLED", "REVERSED", "EXPIRED"}:
+        return words[key]
+    return words["PENDING"]
+
+
 @dataclass(frozen=True)
 class Prompt:
     id: str

@@ -177,3 +177,49 @@ def test_history_phrases_people_actually_say():
     assert three.label == "3 days ago" and three.start < two.start
     october = parse_history_query("history for october", now)
     assert october.label == "October" and october.start.month in (9, 10) and october.end <= now
+
+
+def _bank_rows():
+    from datetime import datetime
+    from types import SimpleNamespace
+
+    return [
+        SimpleNamespace(reference="AVZ1", status="SETTLED", amount_kobo=500000, account_number="0123987001",
+                        recipient_name="Chukwuemeka Ifeanyi Nwosu", created_at=datetime(2026, 11, 10, 20, 40)),
+        SimpleNamespace(reference="AVZ0", status="SETTLED", amount_kobo=200000, account_number="0987654322",
+                        recipient_name="Aisha Hauwa Bello", created_at=datetime(2026, 11, 9, 9, 5)),
+    ]
+
+
+async def test_last_transaction_is_one_clear_sentence(services):
+    o = services["orchestrator"]
+    c = make_customer(services)
+
+    async def rows(*args, **kwargs):
+        return _bank_rows()
+
+    o.bank.list_transactions = rows
+    events = await o.process_text(c.ctx, "what was my last transaction")
+    said = [e for e in events if e.get("type") == "prompt.play"][0]
+    assert said["id"] == "last_transaction"
+    assert said["text"].startswith("Your last transaction was ₦5,000.00 to Chukwuemeka Ifeanyi Nwosu on 10 Nov, 9:40 PM. Status: ")
+
+
+async def test_history_in_yoruba_has_no_english_pieces(services):
+    """10 Nov: the summary ("settled. Latest:") and the period ("the last 30 days") were English."""
+    o = services["orchestrator"]
+    c = make_customer(services)
+    c.ctx.language = "yo"
+
+    async def rows(*args, **kwargs):
+        return _bank_rows()
+
+    o.bank.list_transactions = rows
+    events = await o.process_text(c.ctx, "show my transactions yesterday")
+    text = [e for e in events if e.get("type") == "prompt.play"][0]["text"]
+    assert "àná" in text and "ti dé" in text
+    for english in ("settled", "Latest", "yesterday", "the last"):
+        assert english not in text
+    last = await o.process_text(c.ctx, "what was my last transaction")
+    said = [e for e in last if e.get("type") == "prompt.play"][0]["text"]
+    assert said.startswith("Ìsanwó yín tó kẹ́yìn") and "10/11/2026, 21:40" in said and "ó ti dé" in said
