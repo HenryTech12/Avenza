@@ -21,7 +21,7 @@ Avenza reads back the bank-verified name, the customer says yes, and only a
 | `frontend/` | The frontend team's app (Preact + TypeScript + Vite), from PR #1 `add-frontend`. Built inside the Docker image and served by the backend at `/` (same origin as the API). Env: `VITE_BACKEND_MODE`, `VITE_API_BASE_URL` (empty = same origin), `VITE_WS_URL` |
 | `web/` | Legacy PWA, served only when `frontend/dist` does not exist |
 | `deploy/forge/` | `app.yaml` (ConfigMap, Deployment, Service), `deploy.sh`, `env.forge.example` |
-| `scripts/` | `sandbox_smoke.py`, `register_webhook.py`, `latency_probe.py`, `latency_report.py` |
+| `scripts/` | `sandbox_smoke.py`, `register_webhook.py`, `latency_probe.py`, `latency_report.py`, `yarngpt_tts_probe.py` |
 | `docs/` | `FORGE.md` (platform runbook), `PROTOCOL.md` (WebSocket contract), `SECURITY.md` |
 | `CHANGES.md` | Everything changed since the 9 Nov review |
 
@@ -100,10 +100,12 @@ override the ConfigMap) and uses the `regcred` pull secret automatically.
 
 1. **YarnGPT TTS stalls**: `200 OK` then no bytes for 40 s on a long sentence
    (trace `9bff69a89f3da93d573b6b2a59b10485`); a short "Payment settled." got a
-   `422` even with a voice (trace `368442d03167d955c282d8946386e125`). Next: print
-   the 422 body, and test `POST /api/v1/tts/prepare` → `GET /api/v1/tts/stream/{ticket}`
-   as an alternative route. If that works, switch `yarngpt_tts.py` to it.
-   Email YarnGPT support with the trace ids if both stall.
+   `422` even with a voice (trace `368442d03167d955c282d8946386e125`).
+   Done (10 Nov): the 422 reason (`error.details`) is now logged; a stall logs ms and
+   bytes received; opt-in `YARNGPT_TTS_ROUTE=ticket` (prepare → stream, **unverified**).
+   Next: `kubectl exec deploy/app -- python scripts/yarngpt_tts_probe.py` (≤4 paid calls),
+   read the 422 body and compare routes; if ticket works, set `YARNGPT_TTS_ROUTE=ticket`
+   in `.env.forge` and redeploy. Email YarnGPT support with the trace ids if both stall.
 2. **Sahara on the cluster is unverified.** Run the latency probe once TTS works
    (≤3 turns a minute), or a direct Sahara test with a WAV.
 3. **Cloudflare Access now fronts team18.xtradot.co**: every request gets a 302 to
