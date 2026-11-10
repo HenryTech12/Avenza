@@ -51,6 +51,9 @@ CONVERSATION_PATH = "/api/v1/streaming/conversation"
 PREPARE_PATH = "/api/v1/tts/prepare"
 STREAM_PATH = "/api/v1/tts/stream/"
 MAX_CHARS = 5000
+# YarnGPT rejects shorter text with 422 INPUT_TOO_SHORT (measured on the cluster,
+# 10 Nov 2026). Shorter text gets no audio, so the device voice speaks it.
+MIN_CHARS = 20
 ROUTES = ("conversation", "ticket")
 
 
@@ -116,6 +119,10 @@ class YarnGPTTTS(TTSProvider):
         text = (text or "").strip()
         if not text:
             raise ProviderError("nothing to synthesize")
+        if len(text) < MIN_CHARS:
+            logger.info("tts skipped: %d characters is under YarnGPT's minimum of %d", len(text), MIN_CHARS)
+            self.last_error = None
+            return TTSResult(b"", self.default_sample_rate, Timing())
         client = self._client or httpx.AsyncClient(timeout=self.timeout)
         payload = {"text": text[:MAX_CHARS], "output_format": self.response_format}
         v = voice or await self._voice(client)

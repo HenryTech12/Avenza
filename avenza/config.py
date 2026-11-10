@@ -129,6 +129,11 @@ class Settings:
     latency_log: str = "reports/latency.jsonl"
     tts_timeout_s: float = 6.0
     tts_cache_size: int = 256
+    # Synthesise every fixed prompt once at startup so only read-backs wait for TTS.
+    tts_prewarm: bool = True
+    tts_prewarm_languages: str = "en"
+    tts_prewarm_concurrency: int = 2
+    tts_prewarm_timeout_s: float = 30.0
 
     # YarnGPT names used by the AI package. YARN_* remains supported.
     yarngpt_api_key: str = ""
@@ -260,6 +265,10 @@ def load_settings() -> Settings:
         latency_log=os.getenv("LATENCY_LOG", "reports/latency.jsonl"),
         tts_timeout_s=_float("TTS_TIMEOUT_S", 6.0),
         tts_cache_size=_int("TTS_CACHE_SIZE", 256),
+        tts_prewarm=_bool("TTS_PREWARM", True),
+        tts_prewarm_languages=os.getenv("TTS_PREWARM_LANGUAGES", "en"),
+        tts_prewarm_concurrency=_int("TTS_PREWARM_CONCURRENCY", 2),
+        tts_prewarm_timeout_s=_float("TTS_PREWARM_TIMEOUT_S", 30.0),
         yarngpt_api_key=os.getenv("YARNGPT_API_KEY", os.getenv("YARN_API_KEY", "")),
         yarngpt_asr_url=os.getenv("YARNGPT_ASR_WS_URL", os.getenv("YARN_ASR_URL", "")),
         yarngpt_tts_url=os.getenv("YARNGPT_TTS_URL", os.getenv("YARN_TTS_URL", "")),

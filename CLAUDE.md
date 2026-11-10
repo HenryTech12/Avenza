@@ -98,14 +98,13 @@ override the ConfigMap) and uses the `regcred` pull secret automatically.
 
 ## Open issues (as of 10 Nov 2026, morning)
 
-1. **YarnGPT TTS stalls**: `200 OK` then no bytes for 40 s on a long sentence
-   (trace `9bff69a89f3da93d573b6b2a59b10485`); a short "Payment settled." got a
-   `422` even with a voice (trace `368442d03167d955c282d8946386e125`).
-   Done (10 Nov): the 422 reason (`error.details`) is now logged; a stall logs ms and
-   bytes received; opt-in `YARNGPT_TTS_ROUTE=ticket` (prepare → stream, **unverified**).
-   Next: `kubectl exec deploy/app -- python scripts/yarngpt_tts_probe.py` (≤4 paid calls),
-   read the 422 body and compare routes; if ticket works, set `YARNGPT_TTS_ROUTE=ticket`
-   in `.env.forge` and redeploy. Email YarnGPT support with the trace ids if both stall.
+1. **YarnGPT TTS** (probe run 10 Nov): minimum text is **20 characters** (422
+   `INPUT_TOO_SHORT`); shorter text is no longer sent and English prompts are all ≥20.
+   First audio is 3.5–4.6 s for 175 characters, arriving almost all at once. Fixed
+   prompts are pre-generated at startup (`tts prewarm:` log line; ~50 calls per pod start),
+   so only read-backs wait. **Read-backs are close to `TTS_TIMEOUT_S=6`**: a long one (with a
+   warning prefix) may time out and fall back to the device voice. Ticket route
+   (`YARNGPT_TTS_ROUTE=ticket`) stays opt-in until the probe shows it is consistently faster.
 2. **Sahara on the cluster is unverified.** Run the latency probe once TTS works
    (≤3 turns a minute), or a direct Sahara test with a WAV.
 3. **Cloudflare Access now fronts team18.xtradot.co**: every request gets a 302 to

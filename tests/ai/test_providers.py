@@ -331,6 +331,7 @@ def test_wav_roundtrip_and_decode():
 
 # ---- TTS -------------------------------------------------------------------------------
 CONVERSATION = "https://api.yarngpt.ai/api/v1/streaming/conversation"
+SAY = "Thank you. Place your finger on the sensor."  # over YarnGPT's 20-character minimum
 
 
 def tts_with(handler, url=CONVERSATION, **kw):
@@ -347,9 +348,9 @@ def test_yarngpt_tts_uses_the_conversation_route_and_reads_the_rate_header():
         return httpx.Response(200, content=tone_pcm(0.1, 22050),
                               headers={"Content-Type": "audio/l16; rate=22050; channels=1"})
 
-    res = run(tts_with(handler).synthesize("Hello", None, "en"))
+    res = run(tts_with(handler).synthesize(SAY, None, "en"))
     assert seen["url"] == CONVERSATION
-    assert seen["json"] == {"text": "Hello", "output_format": "pcm", "voice": "V"}
+    assert seen["json"] == {"text": SAY, "output_format": "pcm", "voice": "V"}
     assert seen["auth"] == "Bearer k" and seen["idem"]
     assert res.sample_rate == 22050 and len(res.pcm) == 4410  # rate from the header, never assumed
     assert res.timing.time_to_first_audio_ms is not None
@@ -357,7 +358,7 @@ def test_yarngpt_tts_uses_the_conversation_route_and_reads_the_rate_header():
 
 def test_yarngpt_tts_still_decodes_wav():
     res = run(tts_with(lambda r: httpx.Response(200, content=pcm_to_wav_bytes(tone_pcm(0.1, 24000), 24000),
-                                                 headers={"Content-Type": "audio/wav"})).synthesize("Hi", None, "en"))
+                                                 headers={"Content-Type": "audio/wav"})).synthesize(SAY, None, "en"))
     assert res.sample_rate == 24000 and len(res.pcm) == 4800
 
 
@@ -375,19 +376,19 @@ def test_yarngpt_tts_reports_the_error_envelope():
     body = {"error": {"code": "QUOTA_EXCEEDED", "message": "top up", "trace_id": "tr_1"}}
     tts = tts_with(lambda r: httpx.Response(402, json=body))
     with pytest.raises(ProviderError, match="402 QUOTA_EXCEEDED"):
-        run(tts.synthesize("Hi", None, "en"))
+        run(tts.synthesize(SAY, None, "en"))
     assert "tr_1" in tts.last_error
 
 
 def test_yarngpt_tts_errors():
     with pytest.raises(ProviderError):
-        run(tts_with(lambda r: httpx.Response(503)).synthesize("Hi", None, "en"))
+        run(tts_with(lambda r: httpx.Response(503)).synthesize(SAY, None, "en"))
     with pytest.raises(ProviderError):
-        run(tts_with(lambda r: httpx.Response(200, content=b"ID3....")).synthesize("Hi", None, "en"))
+        run(tts_with(lambda r: httpx.Response(200, content=b"ID3....")).synthesize(SAY, None, "en"))
     with pytest.raises(ProviderError):
         run(tts_with(lambda r: httpx.Response(200)).synthesize("   ", None, "en"))
     with pytest.raises(NotConfigured):
-        run(YarnGPTTTS(api_key="").synthesize("Hi", None, "en"))
+        run(YarnGPTTTS(api_key="").synthesize(SAY, None, "en"))
 
 
 def test_mock_tts_records_calls():
@@ -423,8 +424,8 @@ def test_yarngpt_tts_uses_the_catalogue_default_voice_when_none_is_set(monkeypat
         return httpx.Response(200, content=tone_pcm(0.05, 24000), headers={"Content-Type": "audio/l16; rate=24000; channels=1"})
 
     tts = YarnGPTTTS(api_key="k", url=CONVERSATION, client=httpx.AsyncClient(transport=httpx.MockTransport(handler)))
-    run(tts.synthesize("Hi", None, "en"))
-    run(tts.synthesize("Again", None, "en"))
+    run(tts.synthesize(SAY, None, "en"))
+    run(tts.synthesize(SAY + " Again.", None, "en"))
     assert [b["voice"] for b in calls["bodies"]] == ["adaora", "adaora"]
     assert calls["voices"] == 1  # looked up once
 
@@ -441,7 +442,7 @@ def test_yarngpt_tts_uses_the_catalogue_default_voice_when_none_is_set(monkeypat
 def test_yarngpt_tts_422_keeps_the_reason(body, expected):
     tts = tts_with(lambda r: httpx.Response(422, json=body))
     with pytest.raises(ProviderError):
-        run(tts.synthesize("Payment settled.", None, "en"))
+        run(tts.synthesize(SAY, None, "en"))
     for part in expected:
         assert part in tts.last_error
 
@@ -449,7 +450,7 @@ def test_yarngpt_tts_422_keeps_the_reason(body, expected):
 def test_yarngpt_tts_non_json_error_body_is_kept():
     tts = tts_with(lambda r: httpx.Response(422, content=b"text too short"))
     with pytest.raises(ProviderError):
-        run(tts.synthesize("Hi", None, "en"))
+        run(tts.synthesize(SAY, None, "en"))
     assert "text too short" in tts.last_error
 
 
@@ -459,7 +460,7 @@ def test_yarngpt_tts_stall_says_how_many_bytes_arrived():
 
     tts = tts_with(handler)
     with pytest.raises(ProviderError):
-        run(tts.synthesize("A long read-back sentence.", None, "en"))
+        run(tts.synthesize(SAY, None, "en"))
     assert "ReadTimeout" in tts.last_error and "0 bytes received" in tts.last_error
     assert "conversation route" in tts.last_error
 
@@ -470,14 +471,14 @@ def test_yarngpt_tts_ticket_route_prepares_then_streams():
     def handler(req):
         seen.append((req.method, req.url.path))
         if req.url.path == "/api/v1/tts/prepare":
-            assert json.loads(req.read()) == {"text": "Hello", "output_format": "pcm", "voice": "V"}
+            assert json.loads(req.read()) == {"text": SAY, "output_format": "pcm", "voice": "V"}
             assert req.headers.get("Idempotency-Key")
             return httpx.Response(200, json={"ticket": "tk_1", "expires_in": 60})
         assert req.headers["Authorization"] == "Bearer k"
         return httpx.Response(200, content=tone_pcm(0.1, 16000),
                               headers={"Content-Type": "audio/l16; rate=16000; channels=1"})
 
-    res = run(tts_with(handler, route="ticket").synthesize("Hello", None, "en"))
+    res = run(tts_with(handler, route="ticket").synthesize(SAY, None, "en"))
     assert seen == [("POST", "/api/v1/tts/prepare"), ("GET", "/api/v1/tts/stream/tk_1")]
     assert res.sample_rate == 16000 and len(res.pcm) == 3200
 
@@ -495,19 +496,19 @@ def test_yarngpt_tts_ticket_route_reads_other_shapes(prepared, path):
         streamed.append(req.url.path)
         return httpx.Response(200, content=tone_pcm(0.05, 24000), headers={"Content-Type": "audio/l16; rate=24000"})
 
-    run(tts_with(handler, route="ticket").synthesize("Hi", None, "en"))
+    run(tts_with(handler, route="ticket").synthesize(SAY, None, "en"))
     assert streamed == [path]
 
 
 def test_yarngpt_tts_ticket_route_errors_are_reported():
     tts = tts_with(lambda r: httpx.Response(200, json={"status": "ok"}), route="ticket")
     with pytest.raises(ProviderError):
-        run(tts.synthesize("Hi", None, "en"))
+        run(tts.synthesize(SAY, None, "en"))
     assert "no ticket" in tts.last_error
     tts = tts_with(lambda r: httpx.Response(404, json={"error": {"code": "NOT_FOUND", "message": "no route"}}),
                    route="ticket")
     with pytest.raises(ProviderError):
-        run(tts.synthesize("Hi", None, "en"))
+        run(tts.synthesize(SAY, None, "en"))
     assert "404 NOT_FOUND" in tts.last_error
 
 

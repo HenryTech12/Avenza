@@ -9,7 +9,7 @@ from pathlib import Path
 PROMPTS: dict[str, dict[str, str]] = {
     "en": {
         "listening": "Listening. Say what you want to do.",
-        "listening_resume": "Listening again.",
+        "listening_resume": "I am listening again.",
         "session_ready": "Avenza is ready. Say a payment request.",
         "ask_amount": "How much do you want to send?",
         "ask_account": "Which account number should I send to?",
@@ -57,7 +57,7 @@ PROMPTS: dict[str, dict[str, str]] = {
         "no_draft": "There is no draft. Say a payment request.",
         "name_not_found": "I could not find that account at {bank}. Please say the account number again. No money moved.",
         "history_receipt_missing": "I found no receipt to read.",
-        "unlock_success": "Transfers unlocked.",
+        "unlock_success": "Transfers are unlocked now.",
         "unlock_failed": "I could not verify your fingerprint. Transfers remain locked.",
         "voice_biometric": "Use your fingerprint to approve. Voice cannot move money.",
         "session_expired": "This session expired. Please start again. No money moved.",
@@ -68,7 +68,7 @@ PROMPTS: dict[str, dict[str, str]] = {
         "confirm_again": "Because this looks like a repeat payment, please confirm once more.",
         "name_cannot_receive": "That account cannot receive payments right now. No money has moved.",
         "reversed": "Your payment of {amount_display} to {recipient} was reversed by the bank. The money is back in your account.",
-        "charges": "Charges {charges}.",
+        "charges": "The bank charge was {charges}.",
         "sending": "Approved. Sending it to the bank now.",
     },
     "yo": {
@@ -285,6 +285,13 @@ class PromptLibrary:
             elif fallback.exists():
                 audio_url = f"/prompts/{fallback.name}"
         return Prompt(id=prompt_id, text=text, language=lang, audio_url=audio_url)
+
+    @staticmethod
+    def is_fixed(prompt_id: str, language: str = "en") -> bool:
+        """True when the prompt has no variable part, so its audio can be cached."""
+        table = PROMPTS.get(language, PROMPTS["en"])
+        text = table.get(prompt_id, PROMPTS["en"].get(prompt_id))
+        return text is not None and "{" not in text
 
     def all_ids(self) -> list[str]:
         return sorted(PROMPTS["en"].keys())
