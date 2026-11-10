@@ -105,8 +105,12 @@ override the ConfigMap) and uses the `regcred` pull secret automatically.
    so only read-backs wait. **Read-backs are close to `TTS_TIMEOUT_S=6`**: a long one (with a
    warning prefix) may time out and fall back to the device voice. Ticket route
    (`YARNGPT_TTS_ROUTE=ticket`) stays opt-in until the probe shows it is consistently faster.
-2. **Sahara on the cluster is unverified.** Run the latency probe once TTS works
-   (≤3 turns a minute), or a direct Sahara test with a WAV.
+2. **Sahara works on the cluster** (latency probe, 10 Nov, 3 turns): `stt_final_ms` ~5.7–6.0 s
+   after end of speech, the largest stage. Its commits are cumulative; two were being joined
+   ("…0100010001000. Send ₦5k to GTBank account 0123987001."), fixed by taking the last one.
+   Measured: `tts_ttfa_ms` 4584/4894 ms, `reply_ms` median 11392 ms (target ~2000);
+   one read-back with a name-mismatch warning hit the 6 s TTS timeout.
+   Next: compare `AI_STT_CHOICE=en=yarngpt|sahara` in one probe run.
 3. **Cloudflare Access now fronts team18.xtradot.co**: every request gets a 302 to
    `centrictech.cloudflareaccess.com` (since 9 Nov ~22:20). Ask the Forge organisers whether it
    is intended and how judges/phones get in. With the frontend served on the same origin

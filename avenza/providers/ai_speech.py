@@ -54,6 +54,13 @@ class AILiveStream(STTStream):
         self._error: BaseException | None = None
         self._started = time.perf_counter()
 
+    def _final_events(self) -> list:
+        """The finals that make up the transcript: only the last one when each is cumulative."""
+        finals = [f for f in self._finals if f.text.strip()]
+        if finals and getattr(self.provider, "cumulative_finals", False):
+            return finals[-1:]
+        return finals
+
     async def _ensure(self) -> None:
         if self._stream is None:
             self._stream = self.provider.stream(self.language, self.sample_rate)
@@ -68,7 +75,7 @@ class AILiveStream(STTStream):
                 else:
                     self._interim = event.text
                 if self.on_partial is not None:
-                    text = " ".join([f.text for f in self._finals] + ([self._interim] if self._interim else []))
+                    text = " ".join([f.text for f in self._final_events()] + ([self._interim] if self._interim else []))
                     try:
                         await self.on_partial(text.strip())
                     except Exception:  # noqa: BLE001 - display only
@@ -168,8 +175,9 @@ class AILiveStream(STTStream):
             return TranscriptResult(
                 "", 0.0, name, language=self.language, error=f"ai_stt_error:{type(self._error).__name__}"
             )
-        text = " ".join(f.text.strip() for f in self._finals if f.text.strip()).strip()
-        confs = [f.confidence for f in self._finals if f.confidence is not None]
+        finals = self._final_events()
+        text = " ".join(f.text.strip() for f in finals if f.text.strip()).strip()
+        confs = [f.confidence for f in finals if f.confidence is not None]
         timing = self._stream.timing
         return TranscriptResult(
             text=text,
