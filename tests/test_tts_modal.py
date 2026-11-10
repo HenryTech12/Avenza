@@ -33,7 +33,7 @@ async def test_sends_text_language_and_speaker_and_decodes_the_wav():
     assert seen[0] == {"text": "Good morning, Lagos!", "lang": "english", "speaker": "idera"}
     assert res.sample_rate == 24000 and len(res.pcm) == 9600
     await tts.synthesize("Ẹ káàárọ̀", None, "yo")
-    assert seen[1]["lang"] == "yoruba" and seen[1]["speaker"] == "yoruba_female2"
+    assert seen[1]["lang"] == "yoruba" and seen[1]["speaker"] == "idera"  # one multilingual voice
 
 
 async def test_speakers_can_be_overridden_and_an_explicit_voice_wins():

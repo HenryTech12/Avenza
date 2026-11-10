@@ -9,7 +9,7 @@ out of hosted-API credits. Its web endpoint (FastAPI, docs at ``/docs``)::
     GET  https://<user>--yarngpt-yarngpt-speakers.<region>.modal.run  -> the voices
 
 The open-source model speaks English, Yoruba, Igbo and Hausa, each with its own
-speakers, so the speaker is chosen per language (``YARNGPT_MODAL_SPEAKERS``).
+speakers, and every voice speaks all of them; a different voice per language is optional (``YARNGPT_MODAL_SPEAKERS``).
 
 A GPU container that has been idle takes about a minute to start, so the first
 call after a pause is slow: the startup pre-warm (long timeout) wakes it, and a
@@ -31,9 +31,10 @@ from ..types import NotConfigured, ProviderError, TTSProvider, TTSResult, Timing
 from .audio import decode_audio_response
 
 LANG_NAMES = {"en": "english", "yo": "yoruba", "ig": "igbo", "ha": "hausa", "pcm": "english"}
-# Defaults from the open-source model's speaker list; check GET <speakers endpoint> and override
-# with YARNGPT_MODAL_SPEAKERS="en=idera,yo=yoruba_female2,..." if your deployment differs.
-DEFAULT_SPEAKERS = {"en": "idera", "yo": "yoruba_female2", "ig": "igbo_female2", "ha": "hausa_female1", "pcm": "idera"}
+# YarnGPT voices are multilingual ("every voice speaks English, Pidgin, Yoruba, Igbo and Hausa"),
+# so one voice serves every language: Idera by default. Override per language with
+# YARNGPT_MODAL_SPEAKERS="en=idera,yo=wura,..." (names from the deployment's speakers endpoint).
+DEFAULT_SPEAKERS = {"en": "idera", "yo": "idera", "ig": "idera", "ha": "idera", "pcm": "idera"}
 
 
 def parse_speakers(spec: str) -> Dict[str, str]:
