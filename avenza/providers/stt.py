@@ -303,6 +303,10 @@ def build_tts(settings: Settings):
     try:
         if settings.tts_provider == "yarn":
             return YarnTTS(settings)
+        if settings.tts_provider in {"yarngpt-modal", "modal"}:
+            from .ai_speech import AIModalYarnTTS
+
+            return AIModalYarnTTS(settings)
         if settings.tts_provider in {"ai", "yarngpt"}:
             from .ai_speech import AIYarnTTS
 

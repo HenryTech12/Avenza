@@ -271,10 +271,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             reconciler = asyncio.create_task(_reconcile_loop())
         # Fixed prompts are synthesised in the background; startup does not wait.
         prewarm = asyncio.create_task(orchestrator.prewarm_tts())
+        keepwarm = None
+        if settings.yarngpt_modal_keepwarm_s > 0 and hasattr(tts, "keep_warm"):
+            keepwarm = asyncio.create_task(tts.keep_warm(settings.yarngpt_modal_keepwarm_s))
         try:
             yield
         finally:
             prewarm.cancel()
+            if keepwarm is not None:
+                keepwarm.cancel()
             if reconciler is not None:
                 reconciler.cancel()
                 try:

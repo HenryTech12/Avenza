@@ -367,3 +367,65 @@ class AIYarnTTS(TTSProvider):
     @property
     def last_error(self) -> str | None:
         return getattr(self.tts, "last_error", None)
+
+
+class AIModalYarnTTS(TTSProvider):
+    """Self-hosted YarnGPT on Modal first; the hosted YarnGPT API if Modal fails fast; else the phone's voice.
+
+    A cold Modal container needs about a minute, longer than a live turn may wait (TTS_TIMEOUT_S):
+    that turn falls back to the phone's voice, while the startup pre-warm (long timeout) or the
+    optional keep-warm ping (YARNGPT_MODAL_KEEPWARM_S) wakes the container.
+    """
+
+    name = "ai:yarngpt-modal"
+    simulated = False
+    prewarm_timeout_s = 120.0  # the first call may wait for the GPU container to start
+
+    def __init__(self, settings: Settings):
+        from avenza_ai.providers.yarngpt_modal import ModalYarnGPTTTS, parse_speakers
+
+        self.settings = settings
+        self.modal = ModalYarnGPTTTS(
+            url=settings.yarngpt_modal_url,
+            speakers=parse_speakers(settings.yarngpt_modal_speakers),
+            timeout=max(float(settings.tts_timeout_s), self.prewarm_timeout_s),
+        )
+        if not self.modal.is_configured():
+            raise ProviderNotConfigured("YARNGPT_MODAL_URL is not set")
+        try:
+            self.fallback: TTSProvider | None = AIYarnTTS(settings)
+        except ProviderNotConfigured:
+            self.fallback = None
+
+    async def synthesize(self, text: str, voice: str = "", language: str = "en") -> AudioResult:
+        start = time.perf_counter()
+        try:
+            result = await self.modal.synthesize(text, voice or None, language)
+        except (NotConfigured, ProviderError) as exc:
+            logger.warning("tts (modal) failed: %s", exc)
+            if self.fallback is not None:
+                return await self.fallback.synthesize(text, voice, language)
+            return AudioResult(b"", 24000, self.name, text=text, simulated=False)
+        elapsed = int((time.perf_counter() - start) * 1000)
+        return AudioResult(
+            result.pcm,
+            result.sample_rate,
+            self.name,
+            ttfa_ms=int(result.timing.time_to_first_audio_ms or elapsed),
+            total_ms=elapsed,
+            text=text,
+        )
+
+    async def keep_warm(self, every_s: int) -> None:
+        """Ping the Modal container so it never goes cold during a demo (it costs GPU time while on)."""
+        while True:
+            try:
+                await self.modal.synthesize("Avenza is ready.", None, "en")
+                logger.info("tts (modal) keep-warm ok")
+            except Exception as exc:  # noqa: BLE001 - keep trying
+                logger.info("tts (modal) keep-warm failed: %s", exc)
+            await asyncio.sleep(max(30, every_s))
+
+    @property
+    def last_error(self) -> str | None:
+        return getattr(self.modal, "last_error", None)

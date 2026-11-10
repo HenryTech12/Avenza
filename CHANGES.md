@@ -4,6 +4,17 @@ All 481 tests pass (415 existing + 66 new in `tests/test_fixes.py`). 51 of the
 new tests fail on the previous code, which shows they catch the defects below.
 
 
+## 10 November 2026 (night): self-hosted YarnGPT on Modal
+
+- `TTS_PROVIDER=yarngpt-modal` with `YARNGPT_MODAL_URL`: Avenza's voice from the
+  team's own deployment of the open-source YarnGPT (`POST {text, lang, speaker}` ->
+  wav), so the demo does not depend on hosted-API credits. Speaker per language
+  (`YARNGPT_MODAL_SPEAKERS`; English, Yoruba, Igbo, Hausa). Falls back to the hosted
+  YarnGPT API when Modal fails fast, then to the phone's voice.
+- A cold Modal container takes about a minute: the pre-warm waits up to 120 s for it;
+  `YARNGPT_MODAL_KEEPWARM_S=90` pings it so it stays warm during a demo.
+- `scripts/modal_tts_probe.py`: cold and warm timings per language, `--save` writes clips.
+
 ## 10 November 2026 (evening): animated splash, onboarding as one conversation
 
 - **Splash**: full-window animated scene (letters, rising pearl with moving

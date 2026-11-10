@@ -93,6 +93,9 @@ override the ConfigMap) and uses the `regcred` pull secret automatically.
   `output_format: pcm`, sample rate read from `Content-Type: audio/l16; rate=N`.
   **`voice` is required** (422 without it) — `YARNGPT_DEFAULT_VOICE=adaora`; the code also
   falls back to the catalogue default. Every call spends real credits.
+- TTS (self-hosted, 10 Nov): open-source YarnGPT on Modal, `TTS_PROVIDER=yarngpt-modal` +
+  `YARNGPT_MODAL_URL` (**only in `.env`/`.env.forge`: the endpoint is unauthenticated, the repo is public**).
+  Cold start ~1 min; `YARNGPT_MODAL_KEEPWARM_S=90` during demos. Probe: `python scripts/modal_tts_probe.py --save`.
 - LLM: Groq for testing (LLM_ lines in `.env.forge`); **Demo Day uses Huawei MaaS**
   (`glm-5.2`, thinking off): delete the LLM_ lines from `.env.forge` and redeploy.
 

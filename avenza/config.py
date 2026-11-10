@@ -145,6 +145,10 @@ class Settings:
     yarngpt_asr_url: str = ""
     yarngpt_tts_url: str = ""
     yarngpt_default_voice: str = ""
+    # Self-hosted open-source YarnGPT on Modal (TTS_PROVIDER=yarngpt-modal). Unauthenticated URL: keep it in .env.
+    yarngpt_modal_url: str = ""
+    yarngpt_modal_speakers: str = ""
+    yarngpt_modal_keepwarm_s: int = 0
 
     webauthn_rp_id: str = "localhost"
     webauthn_rp_name: str = "Avenza"
@@ -281,6 +285,9 @@ def load_settings() -> Settings:
         yarngpt_asr_url=os.getenv("YARNGPT_ASR_WS_URL", os.getenv("YARN_ASR_URL", "")),
         yarngpt_tts_url=os.getenv("YARNGPT_TTS_URL", os.getenv("YARN_TTS_URL", "")),
         yarngpt_default_voice=os.getenv("YARNGPT_DEFAULT_VOICE", os.getenv("YARN_TTS_VOICE", "")),
+        yarngpt_modal_url=os.getenv("YARNGPT_MODAL_URL", ""),
+        yarngpt_modal_speakers=os.getenv("YARNGPT_MODAL_SPEAKERS", ""),
+        yarngpt_modal_keepwarm_s=_int("YARNGPT_MODAL_KEEPWARM_S", 0),
         webauthn_rp_id=os.getenv("WEBAUTHN_RP_ID", "localhost"),
         webauthn_rp_name=os.getenv("WEBAUTHN_RP_NAME", "Avenza"),
         webauthn_origin=os.getenv("WEBAUTHN_ORIGIN", "http://localhost:8000"),

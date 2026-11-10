@@ -183,7 +183,8 @@ class TurnOrchestrator:
                 try:
                     result = await asyncio.wait_for(
                         self.tts.synthesize(key[1], language=key[0]),
-                        self.settings.tts_prewarm_timeout_s,
+                        # a self-hosted model may need a minute to wake up on the first call
+                        max(self.settings.tts_prewarm_timeout_s, getattr(self.tts, "prewarm_timeout_s", 0)),
                     )
                 except Exception as exc:  # noqa: BLE001 - the live path still works
                     logger.warning("tts prewarm failed for %r: %s", key[1][:40], type(exc).__name__)
