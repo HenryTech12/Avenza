@@ -29,7 +29,6 @@ MODEL_ID = "saheedniyi/YarnGPT2"
 WEIGHTS_DIR = "/weights"
 REPO_DIR = "/root/yarngpt"  # the repo root *is* the `yarngpt` package
 WAV_CFG = f"{WEIGHTS_DIR}/wavtokenizer_mediumdata_frame75_3s_nq1_code4096_dim512_kmeans200_attn.yaml"
-WAV_CKPT = f"{WEIGHTS_DIR}/wavtokenizer_large_speech_320_24k.ckpt"
 
 # Read at deploy time on your laptop.
 GPU = os.environ.get("YARNGPT_GPU", "L4")  # "T4" is cheaper and slower; A100/H100 is wasted on a 360M model
@@ -37,8 +36,19 @@ MIN_CONTAINERS = int(os.environ.get("YARNGPT_MIN_CONTAINERS", "0"))  # 1 = alway
 LOCAL_BEAMS = 2  # Yoruba/Igbo/Hausa: the author used 5 (best quality, ~5x slower); 1 is fastest
 
 
+WAV_REPO = "novateur/WavTokenizer-large-speech-75token"
+WAV_CKPT_NAME = "wavtokenizer_large_speech_320_24k.ckpt"
+
+
 def download_weights():
-    """Runs once at image build time so cold starts don't re-download anything."""
+    """Runs once at image build time so cold starts don't re-download anything.
+
+    10 Nov 2026: a rebuild failed with 404 for WAV_CKPT_NAME (the file was renamed or moved in
+    the Hugging Face repo). So every checkpoint in the repo is downloaded and the right one is
+    found by name at start-up (find_wav_ckpt); the names are printed in the build log.
+    """
+    import glob
+
     from huggingface_hub import hf_hub_download, snapshot_download
 
     snapshot_download(MODEL_ID)
@@ -47,12 +57,25 @@ def download_weights():
         "wavtokenizer_mediumdata_frame75_3s_nq1_code4096_dim512_kmeans200_attn.yaml",
         local_dir=WEIGHTS_DIR,
     )
-    hf_hub_download(
-        "novateur/WavTokenizer-large-speech-75token",
-        "wavtokenizer_large_speech_320_24k.ckpt",
-        local_dir=WEIGHTS_DIR,
-    )
+    snapshot_download(WAV_REPO, local_dir=f"{WEIGHTS_DIR}/wav", allow_patterns=["*.ckpt", "*.pt", "*.bin", "*.safetensors"])
+    found = sorted(glob.glob(f"{WEIGHTS_DIR}/wav/**/*", recursive=True))
+    print("[yarngpt] WavTokenizer files:", [f for f in found if not f.endswith("/")])
+    if not any(f.endswith((".ckpt", ".pt", ".bin", ".safetensors")) for f in found):
+        raise RuntimeError(f"no checkpoint found in {WAV_REPO}; open the repo on Hugging Face and check its files")
 
+
+def find_wav_ckpt() -> str:
+    """The WavTokenizer checkpoint: the known name if present, else the best match by name."""
+    import glob
+
+    files = [f for f in glob.glob(f"{WEIGHTS_DIR}/wav/**/*", recursive=True) if f.endswith((".ckpt", ".pt", ".bin", ".safetensors"))]
+    exact = [f for f in files if f.endswith(WAV_CKPT_NAME)]
+    if exact:
+        return exact[0]
+    ranked = sorted(files, key=lambda f: (("24k" in f) + ("320" in f) + ("large" in f) + f.endswith(".ckpt")), reverse=True)
+    if not ranked:
+        raise FileNotFoundError(f"no WavTokenizer checkpoint under {WEIGHTS_DIR}/wav")
+    return ranked[0]
 
 image = (
     modal.Image.debian_slim(python_version="3.11")
@@ -118,7 +141,9 @@ class YarnGPT:
         from yarngpt.audiotokenizer import AudioTokenizerV2
 
         self.torch = torch
-        self.tok = AudioTokenizerV2(MODEL_ID, WAV_CKPT, WAV_CFG)
+        wav_ckpt = find_wav_ckpt()
+        print(f"[yarngpt] WavTokenizer checkpoint: {wav_ckpt}")
+        self.tok = AudioTokenizerV2(MODEL_ID, wav_ckpt, WAV_CFG)
         # float16: fast on every NVIDIA GPU. If the audio ever sounds garbled, try torch.float32.
         self.model = AutoModelForCausalLM.from_pretrained(MODEL_ID, torch_dtype=torch.float16).to(self.tok.device)
         self.model.eval()
