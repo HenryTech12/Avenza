@@ -144,3 +144,48 @@ async def test_prewarm_stops_when_the_provider_is_out_of_credits(services, caplo
         assert await o.prewarm_tts() == 5
     assert len(o.tts.texts) == 6  # five cached, one refused, then it stops
     assert sum("out of credits" in r.getMessage() for r in caplog.records) == 1
+
+
+async def test_restart_replays_fixed_prompts_from_disk_with_no_tts_calls(services, tmp_path):
+    """10 Nov: every start re-generated ~50 lines (credits, minutes on Modal). Now they are saved once."""
+    o = services["orchestrator"]
+    o.settings = dataclasses.replace(o.settings, tts_cache_dir=str(tmp_path))
+    o.tts = CountingTTS()
+    first = await o.prewarm_tts()
+    assert first == len(o.fixed_prompts(["en"])) and len(o.tts.texts) == first
+    assert len(list(tmp_path.glob("*.pcm"))) == first
+
+    # a "restart": empty memory caches, a fresh TTS provider
+    o._tts_fixed.clear()
+    o._tts_cache.clear()
+    o.tts = CountingTTS()
+    assert await o.prewarm_tts() == first
+    assert o.tts.texts == []  # nothing synthesised again
+
+
+async def test_readbacks_never_reach_the_disk_cache(services, tmp_path):
+    o = services["orchestrator"]
+    o.settings = dataclasses.replace(o.settings, tts_cache_dir=str(tmp_path), tts_prewarm=False)
+    o.tts = CountingTTS()
+    c = make_customer(services)
+    events = await o.render_audio(c.ctx, await o.process_text(c.ctx, REQUEST))
+    readback = next(e for e in events if e.get("id") == "readback")
+    assert readback.get("audio")
+    saved = {p.read_bytes() for p in tmp_path.glob("*.pcm")}
+    # only fixed prompts may be written; the read-back (name, amount) stays in memory
+    assert len(list(tmp_path.glob("*.pcm"))) == sum(
+        1 for e in events if e.get("type") == "prompt.play" and o.prompts.is_fixed(e["id"], "en")
+    )
+    assert saved is not None
+
+
+async def test_changing_the_voice_does_not_replay_the_old_one(services, tmp_path):
+    o = services["orchestrator"]
+    o.settings = dataclasses.replace(o.settings, tts_cache_dir=str(tmp_path), yarngpt_default_voice="adaora")
+    o.tts = CountingTTS()
+    await o.prewarm_tts()
+    o._tts_fixed.clear()
+    o.settings = dataclasses.replace(o.settings, yarngpt_default_voice="umar")
+    o.tts = CountingTTS()
+    await o.prewarm_tts()
+    assert len(o.tts.texts) == len(o.fixed_prompts(["en"]))  # new voice: generated again

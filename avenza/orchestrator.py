@@ -108,7 +108,12 @@ class TurnOrchestrator:
             ):
                 continue
             key = (event.get("language") or ctx.language, event["text"])
+            fixed = bool(event.get("id")) and self.prompts.is_fixed(event["id"], key[0])
             cached = self._tts_fixed.get(key) or self._tts_cache.get(key)
+            if cached is None and fixed:
+                cached = self._disk_get(*key)
+                if cached is not None:
+                    self._tts_fixed[key] = cached
             if cached is None:
                 started = time.perf_counter()
                 try:
@@ -127,6 +132,8 @@ class TurnOrchestrator:
                 if ctx.turn is not None and "tts_ttfa_ms" not in ctx.turn.stages:
                     ctx.turn.mark("tts_ttfa_ms", ttfa)
                 cached = (base64.b64encode(result.pcm).decode("ascii"), int(result.sample_rate))
+                if fixed:
+                    self._disk_put(key[0], key[1], result.pcm, int(result.sample_rate))
                 self._tts_cache[key] = cached
                 while len(self._tts_cache) > max(1, self.settings.tts_cache_size):
                     self._tts_cache.popitem(last=False)
@@ -134,6 +141,47 @@ class TurnOrchestrator:
                 self._tts_cache.move_to_end(key)
             event["audio"] = {"encoding": "pcm_s16le", "sample_rate": cached[1], "data": cached[0]}
         return events
+
+    # ------------------------------------------------------------------
+    # Disk cache for fixed prompts (survives restarts; never holds names or amounts)
+    # ------------------------------------------------------------------
+    def _disk_key(self, language: str, text: str) -> str:
+        import hashlib
+
+        s = self.settings
+        # the voice is part of the key, so changing provider or voice never replays the old one
+        voice = f"{getattr(self.tts, 'name', '?')}|{s.yarngpt_default_voice}|{s.yarngpt_modal_speakers}|{s.yarngpt_modal_mode}"
+        return hashlib.sha256(f"{voice}|{language}|{text}".encode()).hexdigest()[:32]
+
+    def _disk_get(self, language: str, text: str) -> tuple[str, int] | None:
+        from pathlib import Path
+
+        if not self.settings.tts_cache_dir:
+            return None
+        key = self._disk_key(language, text)
+        for f in Path(self.settings.tts_cache_dir).glob(f"{key}.*.pcm"):
+            try:
+                rate = int(f.name.split(".")[1])
+                return base64.b64encode(f.read_bytes()).decode("ascii"), rate
+            except (OSError, ValueError):
+                return None
+        return None
+
+    def _disk_put(self, language: str, text: str, pcm: bytes, rate: int) -> None:
+        import os
+        from pathlib import Path
+
+        if not self.settings.tts_cache_dir or not pcm:
+            return
+        try:
+            d = Path(self.settings.tts_cache_dir)
+            d.mkdir(parents=True, exist_ok=True)
+            final = d / f"{self._disk_key(language, text)}.{int(rate)}.pcm"
+            tmp = final.with_suffix(".tmp")
+            tmp.write_bytes(pcm)
+            os.replace(tmp, final)
+        except OSError as exc:  # a read-only or full disk only costs speed
+            logger.info("tts cache not written: %s", exc)
 
     def fixed_prompts(self, languages: list[str]) -> list[tuple[str, str]]:
         """(language, text) of every prompt with no variable part and no recorded clip."""
@@ -176,7 +224,15 @@ class TurnOrchestrator:
 
         out_of_credit = asyncio.Event()
 
+        from_disk = 0
+
         async def one(key: tuple[str, str]) -> bool:
+            nonlocal from_disk
+            saved = self._disk_get(*key)
+            if saved is not None:
+                self._tts_fixed[key] = saved
+                from_disk += 1
+                return True
             async with gate:
                 if out_of_credit.is_set():
                     return False
@@ -199,12 +255,13 @@ class TurnOrchestrator:
                         out_of_credit.set()
                     return False
                 self._tts_fixed[key] = (base64.b64encode(result.pcm).decode("ascii"), int(result.sample_rate))
+                self._disk_put(key[0], key[1], result.pcm, int(result.sample_rate))
                 return True
 
         done = sum(await asyncio.gather(*(one(k) for k in todo)))
         logger.info(
-            "tts prewarm: %d of %d fixed prompts cached in %.1f s",
-            done, len(todo), time.perf_counter() - started,
+            "tts prewarm: %d of %d fixed prompts cached in %.1f s (%d from the disk cache)",
+            done, len(todo), time.perf_counter() - started, from_disk,
         )
         return done
 

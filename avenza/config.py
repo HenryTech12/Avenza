@@ -139,6 +139,9 @@ class Settings:
     tts_prewarm_languages: str = "en"
     tts_prewarm_concurrency: int = 2
     tts_prewarm_timeout_s: float = 30.0
+    # Fixed prompts' audio is saved here, so a restart replays it with no TTS calls (no credits, no
+    # waiting for Modal). Only prompts without variable parts: read-backs (names, amounts) never touch disk.
+    tts_cache_dir: str = "data/tts-cache"
 
     # YarnGPT names used by the AI package. YARN_* remains supported.
     yarngpt_api_key: str = ""
@@ -198,6 +201,7 @@ class Settings:
             "new_recipient_hold_s": 0,
             "reconcile_interval_s": 0.0,
             "latency_log": "",
+            "tts_cache_dir": "",
         }
         base.update(changes)
         return replace(self, **base)
@@ -284,6 +288,7 @@ def load_settings() -> Settings:
         tts_prewarm_languages=os.getenv("TTS_PREWARM_LANGUAGES", "en"),
         tts_prewarm_concurrency=_int("TTS_PREWARM_CONCURRENCY", 2),
         tts_prewarm_timeout_s=_float("TTS_PREWARM_TIMEOUT_S", 30.0),
+        tts_cache_dir=os.getenv("TTS_CACHE_DIR", "data/tts-cache").strip(),
         yarngpt_api_key=os.getenv("YARNGPT_API_KEY", os.getenv("YARN_API_KEY", "")),
         yarngpt_asr_url=os.getenv("YARNGPT_ASR_WS_URL", os.getenv("YARN_ASR_URL", "")),
         yarngpt_tts_url=os.getenv("YARNGPT_TTS_URL", os.getenv("YARN_TTS_URL", "")),

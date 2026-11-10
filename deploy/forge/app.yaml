@@ -57,6 +57,8 @@ data:
   # Speech: streaming STT and YarnGPT voice. Keys are in avenza-secrets.
   STT_PROVIDER: ai
   TTS_PROVIDER: yarngpt
+  # fixed prompts saved once per pod; a restart replays them with no TTS calls
+  TTS_CACHE_DIR: /data/tts-cache
   STT_STREAMING: "true"
   ALLOW_TEXT_UTTERANCE: "true"
   AI_ENABLED: "true"

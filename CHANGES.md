@@ -4,6 +4,14 @@ All 481 tests pass (415 existing + 66 new in `tests/test_fixes.py`). 51 of the
 new tests fail on the previous code, which shows they catch the defects below.
 
 
+## 10 November 2026 (night): fixed prompts cached on disk
+
+- The audio of every fixed prompt is saved under `TTS_CACHE_DIR` (default
+  `data/tts-cache`, gitignored; `/data/tts-cache` on the cluster). A restart
+  replays them with no TTS calls: no credits, no waiting for Modal. The key
+  includes provider and voice, so changing either generates afresh. Read-backs
+  (names, amounts) are never written to disk. `TTS_CACHE_DIR=` turns it off.
+
 ## 10 November 2026 (night): self-hosted YarnGPT on Modal
 
 - `TTS_PROVIDER=yarngpt-modal` with `YARNGPT_MODAL_URL`: Avenza's voice from the
