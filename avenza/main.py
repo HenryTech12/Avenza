@@ -808,10 +808,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # Static PWA
     # ------------------------------------------------------------------
     app.mount("/static", StaticFiles(directory=str(settings.web_dir)), name="static")
-    app.mount("/prompts", StaticFiles(directory=str(settings.prompt_dir)), name="prompts")
-
     frontend = settings.frontend_dist
     serve_frontend = (frontend / "index.html").is_file()
+
+    # /prompts holds the backend's recorded clips (web/prompts, used as audio_url)
+    # and, when the frontend is served, its own prompt manifest (dist/prompts).
+    # The frontend fetches /prompts/manifest.json at boot; a 404 there stopped it
+    # loading ("Avenza could not finish loading", 10 Nov 2026).
+    prompt_dirs = [settings.prompt_dir.resolve()]
+    if serve_frontend:
+        prompt_dirs.append((frontend / "prompts").resolve())
+
+    @app.get("/prompts/{name:path}", include_in_schema=False)
+    def prompt_file(name: str):
+        for base in prompt_dirs:
+            candidate = (base / name).resolve()
+            if candidate.is_file() and base in candidate.parents:
+                return FileResponse(candidate, headers={"Cache-Control": "no-cache"})
+        return JSONResponse({"detail": "Not Found"}, status_code=404)
     if serve_frontend:
         logger.info("serving the frontend app from %s", frontend)
         _mount_frontend(app, frontend)

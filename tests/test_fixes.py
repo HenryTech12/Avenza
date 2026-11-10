@@ -627,6 +627,26 @@ def test_frontend_never_shadows_the_api(tmp_path):
         assert "outside dist" not in client.get("/%2e%2e/secret.txt").text
 
 
+def test_frontend_prompt_manifest_is_served_beside_backend_clips(tmp_path):
+    """Local run, 10 Nov: /prompts/manifest.json was a 404, so the app stopped at boot."""
+    dist = tmp_path / "dist"
+    (dist / "prompts").mkdir(parents=True)
+    (dist / "index.html").write_text("<html>frontend app</html>")
+    (dist / "prompts" / "manifest.json").write_text('{"version": 1, "voice": "x", "prompts": []}')
+    clips = tmp_path / "clips"
+    clips.mkdir()
+    (clips / "en-cancelled.wav").write_bytes(b"RIFF....WAVE")
+    (tmp_path / "secret.txt").write_text("outside")
+    settings = Settings().for_test(frontend_dist=dist, prompt_dir=clips)
+    with TestClient(create_app(settings)) as client:
+        manifest = client.get("/prompts/manifest.json")
+        assert manifest.status_code == 200 and manifest.json()["version"] == 1
+        assert client.get("/prompts/en-cancelled.wav").content == b"RIFF....WAVE"  # backend clip still wins
+        missing = client.get("/prompts/nope.wav")
+        assert missing.status_code == 404 and missing.headers["content-type"].startswith("application/json")
+        assert "outside" not in client.get("/prompts/%2e%2e/%2e%2e/secret.txt").text
+
+
 def test_legacy_pwa_is_served_without_a_frontend_build(tmp_path):
     with TestClient(create_app(Settings().for_test(frontend_dist=tmp_path / "missing"))) as client:
         assert client.get("/").status_code in {200, 404}
