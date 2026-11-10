@@ -6,7 +6,7 @@ import { signal, computed, effect } from '@preact/signals'
 import { api, setUnauthorizedHandler } from '../api'
 import { createTransport } from '../transport'
 import { protocolLog } from '../transport'
-import { getAudioContext, resumeAudio, audioRunning } from '../audio/audioContext'
+import { getAudioContext, getDecodeContext, resumeAudio, audioRunning, soundAllowedWithoutTouch } from '../audio/audioContext'
 import { MicCapture, MicDeniedError } from '../audio/micCapture'
 import { Vad } from '../audio/vad'
 import { Player, type CtxLike } from '../audio/player'
@@ -744,7 +744,8 @@ export async function boot(): Promise<BootResult> {
     steps.push(w)
     return w
   }
-  const ctx = getAudioContext() // created suspended; decoding works before the first gesture
+  // No AudioContext before a touch (the browser warns); decode clips on an offline context instead.
+  const ctx = getDecodeContext()
   await Promise.all([
     track(document.fonts?.ready ?? Promise.resolve()),
     track(prompts.load(ctx, language.value)),
@@ -775,6 +776,12 @@ export async function unlockAudio(): Promise<boolean> {
   return resumeAudio()
 }
 
+/** Start sound without a touch only when the browser allows it; never create a context it would refuse. */
+export async function tryStartSoundWithoutTouch(): Promise<boolean> {
+  if (!soundAllowedWithoutTouch()) return false
+  return resumeAudio()
+}
+
 export async function retryConnection(): Promise<void> {
   dispatch({ type: 'DISMISS_ERROR' })
   try {
@@ -792,7 +799,7 @@ export async function chooseLanguage(code: Lang): Promise<void> {
     await resumeAudio()
     void player.speak(info.name, info.speechLocale, 'language-name')
   }
-  void prompts.load(getAudioContext(), code).catch(() => undefined)
+  void prompts.load(getDecodeContext(), code).catch(() => undefined)
 }
 
 export function speakConsent(): Promise<void> {
@@ -853,7 +860,7 @@ async function recordConsent(): Promise<void> {
  * Register the fingerprint (a passkey on this device), then record the consent the customer gave on the previous
  * screen. The backend needs the device token for the consent, so the order is passkey first, consent second.
  */
-export async function registerFingerprint(displayName = ''): Promise<EnrolOutcome> {
+export async function registerFingerprint(displayName = '', opts: { quiet?: boolean } = {}): Promise<EnrolOutcome> {
   enrolError.value = ''
   const name = displayName.trim()
   const existing = !!deviceToken.value
@@ -864,7 +871,7 @@ export async function registerFingerprint(displayName = ''): Promise<EnrolOutcom
       onboardingComplete.value = true
       return 'ok'
     }
-    void playPrompt('place_finger_enrol')
+    if (!opts.quiet) void playPrompt('place_finger_enrol') // the onboarding conversation says it itself
     const owner = existing ? await api.me() : null
     const start = await api.registerOptions({ displayName: name, language: language.value, existing: owner ? { userId: owner.id, deviceToken: deviceToken.value as string } : undefined })
     const res = await enrol(start.options)

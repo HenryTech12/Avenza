@@ -84,3 +84,25 @@ describe('ask: question, listen, ask again', () => {
     delete (globalThis as unknown as { webkitSpeechRecognition?: unknown }).webkitSpeechRecognition
   })
 })
+
+describe('ask: when listening cannot work', () => {
+  it('does not keep asking when the recogniser is unreachable', async () => {
+    const { ask } = await import('./listen')
+    class BrokenRec {
+      lang = ''; continuous = false; interimResults = false; maxAlternatives = 1
+      onresult = null
+      onend: (() => void) | null = null
+      onerror: ((e: { error: string }) => void) | null = null
+      start() { setTimeout(() => { this.onerror?.({ error: 'network' }); this.onend?.() }, 1) }
+      stop() {}
+      abort() {}
+    }
+    ;(globalThis as unknown as { webkitSpeechRecognition: unknown }).webkitSpeechRecognition = BrokenRec
+    const said: number[] = []
+    await new Promise<void>((done) => {
+      ask({ lang: 'en-NG', say: async (n) => { said.push(n) }, onText: () => false, onGiveUp: done })
+    })
+    expect(said).toEqual([0]) // asked once; the buttons take over
+    delete (globalThis as unknown as { webkitSpeechRecognition?: unknown }).webkitSpeechRecognition
+  })
+})

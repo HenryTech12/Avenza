@@ -18,8 +18,7 @@ const Lock = lazy(() => import('../screens/Lock/Lock').then((m) => m.Lock))
 const DevPanel = lazy(() => import('../screens/DevPanel/DevPanel').then((m) => m.DevPanel))
 const Preview = lazy(() => import('../screens/Preview/Preview').then((m) => m.Preview))
 const FingerprintSetup = lazy(() => import('../screens/FingerprintSetup/FingerprintSetup').then((m) => m.FingerprintSetup))
-const Consent = lazy(() => import('../screens/Consent/Consent').then((m) => m.Consent))
-const Language = lazy(() => import('../screens/Language/Language').then((m) => m.Language))
+const Onboarding = lazy(() => import('../screens/Onboarding/Onboarding').then((m) => m.Onboarding))
 
 /** Sends the user to /boot until boot has finished, and to onboarding until it is complete. */
 function Guard({ children, needsOnboarding = true }: { children: preact.ComponentChildren; needsOnboarding?: boolean }) {
@@ -31,7 +30,7 @@ function Guard({ children, needsOnboarding = true }: { children: preact.Componen
       if (location.pathname !== '/boot') nav.pending = location.pathname
       route('/boot', true)
     }
-    else if (needsOnboarding && !done) route('/onboarding/language', true)
+    else if (needsOnboarding && !done) route('/onboarding', true)
     else if (needsOnboarding && locked.value && location.pathname !== '/lock') route('/lock', true)
   }, [ready, done, needsOnboarding, locked.value])
   if (!ready || (needsOnboarding && !done)) return null
@@ -72,8 +71,9 @@ export function App() {
       <AlwaysListening />
       <Router>
         <Route path="/boot" component={Boot} />
-        <Route path="/onboarding/language" component={() => <Guard needsOnboarding={false}><Language /></Guard>} />
-        <Route path="/onboarding/consent" component={() => <Guard needsOnboarding={false}><Consent /></Guard>} />
+        <Route path="/onboarding" component={() => <Guard needsOnboarding={false}><Onboarding /></Guard>} />
+        <Route path="/onboarding/language" component={() => <Guard needsOnboarding={false}><Onboarding /></Guard>} />
+        <Route path="/onboarding/consent" component={() => <Guard needsOnboarding={false}><Onboarding /></Guard>} />
         <Route path="/onboarding/fingerprint" component={() => <Guard needsOnboarding={false}><FingerprintSetup /></Guard>} />
         <Route path="/settings" component={() => <Guard><Settings /></Guard>} />
         <Route path="/history" component={() => <Guard><History /></Guard>} />

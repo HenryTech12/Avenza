@@ -1,33 +1,69 @@
-/* Prototype screen 1: dawn sky, a pearl over still water, the wordmark and tagline. */
+/* Opening screen (prototype screen 1), animated: dawn sky, a pearl rising over still water. */
 .splash {
   position: relative;
   width: 100%;
-  max-width: var(--max-width);
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: space-between;
   padding: calc(var(--space-8) + env(safe-area-inset-top)) var(--space-3) calc(var(--space-6) + env(safe-area-inset-bottom));
-  overflow: hidden;
   isolation: isolate;
   border: 0;
   color: #1c2230;
   font: inherit;
   text-align: center;
   background: none;
-  animation: appear 400ms var(--ease);
+  cursor: default;
 }
+button.splash { cursor: pointer; }
+
+/* The sky fills the whole window, also on a desktop. */
 .sky {
-  position: absolute;
+  position: fixed;
   inset: 0;
   z-index: 0;
-  background:
-    radial-gradient(120% 60% at 50% 46%, rgb(255 236 214 / 0.95) 0%, rgb(255 236 214 / 0) 60%),
-    linear-gradient(180deg, #ece6ef 0%, #f3e6dc 38%, #e9d9cf 55%, #c9cfdd 56%, #b8c2d4 75%, #9eabc2 100%);
+  overflow: hidden;
+  background: linear-gradient(180deg, #e9e3f0 0%, #f4e7dd 34%, #f1dccf 52%, #cdd3e1 53%, #b6c0d4 74%, #97a5be 100%);
+  animation: dawn 9s ease-in-out infinite alternate;
 }
+.sun {
+  position: absolute;
+  left: 50%;
+  top: 46%;
+  width: 140vmax;
+  height: 70vmax;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(closest-side, rgb(255 233 207 / 0.95), rgb(255 233 207 / 0) 70%);
+  animation: glow 6s ease-in-out infinite alternate;
+}
+.water {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 53%;
+  bottom: 0;
+  background:
+    repeating-linear-gradient(180deg, rgb(255 255 255 / 0.07) 0 2px, transparent 2px 14px),
+    linear-gradient(180deg, rgb(255 255 255 / 0.25), transparent 40%);
+  background-size: 100% 28px, 100% 100%;
+  animation: waves 7s linear infinite;
+}
+.particle {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: rgb(255 255 255 / 0.85);
+  box-shadow: 0 0 8px 2px rgb(255 240 225 / 0.7);
+  opacity: 0;
+  animation-name: float;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+}
+
 .top,
-.pearl,
+.stage,
 .foot {
   position: relative;
   z-index: 1;
@@ -38,44 +74,108 @@
   align-items: center;
   gap: var(--space-2);
 }
+.word {
+  display: inline-flex;
+  font-size: clamp(2.2rem, 7vw, 3.2rem);
+  letter-spacing: 0.34em;
+  margin-right: -0.34em;
+  font-weight: 400;
+}
+.word span {
+  display: inline-block;
+  opacity: 0;
+  transform: translateY(14px);
+  animation: letter 700ms var(--ease) forwards;
+}
 .tagline {
-  font-size: var(--fs-body);
+  font-size: var(--fs-sub);
   color: #2c3a4f;
+  opacity: 0;
+  animation: rise 900ms var(--ease) 0.9s forwards;
+}
+
+.stage {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 260px;
+  height: 300px;
 }
 .pearl {
-  width: 190px;
-  height: 190px;
+  position: relative;
+  width: 196px;
+  height: 196px;
   border-radius: 50%;
+  overflow: hidden;
   background: var(--pearl);
-  box-shadow: var(--pearl-glow);
-  animation: breathe 4s ease-in-out infinite;
+  box-shadow: var(--pearl-glow), inset -14px -18px 40px rgb(120 130 170 / 0.25);
+  opacity: 0;
+  animation: pearl-in 1.6s var(--ease) 0.4s forwards, breathe 5s ease-in-out 2s infinite;
+}
+.shine {
+  position: absolute;
+  inset: -20%;
+  background: conic-gradient(from 0deg, transparent 0 20%, rgb(255 255 255 / 0.55) 28%, transparent 36% 60%, rgb(214 200 240 / 0.45) 70%, transparent 80%);
+  mix-blend-mode: soft-light;
+  animation: spin 9s linear infinite;
 }
 .reflection {
   position: absolute;
-  left: 50%;
-  top: 112%;
-  width: 150px;
-  height: 46px;
-  transform: translateX(-50%);
+  bottom: 6px;
+  width: 160px;
+  height: 40px;
   border-radius: 50%;
-  background: radial-gradient(ellipse at center, rgb(255 246 236 / 0.75) 0%, rgb(255 246 236 / 0) 70%);
-  filter: blur(4px);
+  background: radial-gradient(ellipse at center, rgb(255 246 236 / 0.8), rgb(255 246 236 / 0) 70%);
+  filter: blur(3px);
+  opacity: 0;
+  animation: rise 1.2s ease 1.2s forwards, shimmer 3.5s ease-in-out 2.4s infinite;
 }
+.ripple {
+  position: absolute;
+  bottom: 0;
+  width: 160px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1.5px solid rgb(255 255 255 / 0.6);
+  opacity: 0;
+  animation: ripple 3.9s ease-out 1.6s infinite;
+}
+
 .foot {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 6px;
   color: #ffffff;
-  text-shadow: 0 1px 6px rgb(30 40 60 / 0.45);
-  font-size: var(--fs-body);
+  text-shadow: 0 1px 8px rgb(30 40 60 / 0.5);
 }
+.claim,
+.claim2,
+.status {
+  opacity: 0;
+  animation: rise 800ms var(--ease) forwards;
+}
+.claim { font-size: var(--fs-sub); animation-delay: 1.4s; }
+.claim2 { animation-delay: 1.7s; }
+.status {
+  margin-top: var(--space-1);
+  font-size: var(--fs-label);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  animation-delay: 2s;
+}
+.dots i {
+  font-style: normal;
+  animation: blink 1.2s infinite;
+}
+.dots i:nth-child(2) { animation-delay: 0.2s; }
+.dots i:nth-child(3) { animation-delay: 0.4s; }
 .bar {
   margin-top: var(--space-2);
-  width: 120px;
+  width: 140px;
   height: 3px;
   border-radius: 2px;
-  background: rgb(255 255 255 / 0.35);
+  background: rgb(255 255 255 / 0.3);
   overflow: hidden;
 }
 .fill {
@@ -83,25 +183,46 @@
   height: 100%;
   background: #ffffff;
   border-radius: 2px;
-  transition: width 200ms var(--ease);
+  transition: width 400ms var(--ease);
 }
 .tapText {
   font-size: var(--fs-sub);
   font-weight: 700;
-  padding: var(--space-1) var(--space-3);
+  padding: var(--space-2) var(--space-4);
   border-radius: var(--radius-pill);
-  background: rgb(28 34 48 / 0.82);
+  background: rgb(28 34 48 / 0.85);
   color: #ffffff;
   text-shadow: none;
+  animation: rise 500ms var(--ease) both, pulse 2s ease-in-out 0.5s infinite;
 }
 .tapHint {
   max-width: 30ch;
+  animation: rise 600ms var(--ease) 0.2s both;
 }
-@keyframes appear {
-  from { opacity: 0; }
-  to { opacity: 1; }
+
+@keyframes letter { to { opacity: 1; transform: none; } }
+@keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@keyframes pearl-in {
+  from { opacity: 0; transform: translateY(70px) scale(0.85); }
+  to { opacity: 1; transform: none; }
 }
-@keyframes breathe {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.03); }
+@keyframes breathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.035); } }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes shimmer { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }
+@keyframes ripple {
+  0% { opacity: 0.7; transform: scale(0.6); }
+  100% { opacity: 0; transform: scale(2.2); }
+}
+@keyframes waves { to { background-position: 0 28px, 0 0; } }
+@keyframes glow { from { opacity: 0.8; } to { opacity: 1; } }
+@keyframes dawn { from { filter: saturate(0.95); } to { filter: saturate(1.12) brightness(1.03); } }
+@keyframes float {
+  0% { opacity: 0; transform: translateY(0); }
+  20% { opacity: 0.9; }
+  100% { opacity: 0; transform: translateY(-60px); }
+}
+@keyframes blink { 0%, 100% { opacity: 0.2; } 50% { opacity: 1; } }
+@keyframes pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgb(255 255 255 / 0.5); }
+  50% { box-shadow: 0 0 0 14px rgb(255 255 255 / 0); }
 }

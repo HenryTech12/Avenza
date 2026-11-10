@@ -4,6 +4,21 @@ All 481 tests pass (415 existing + 66 new in `tests/test_fixes.py`). 51 of the
 new tests fail on the previous code, which shows they catch the defects below.
 
 
+## 10 November 2026 (evening): animated splash, onboarding as one conversation
+
+- **Splash**: full-window animated scene (letters, rising pearl with moving
+  light, ripples, particles, "Avenza is ready" status), also on desktop.
+- **Console warning fixed** ("The AudioContext was not allowed to start"):
+  prompt clips decode on an OfflineAudioContext, and the real AudioContext is
+  only created after a touch or when the browser allows sound (installed app,
+  page already touched). Otherwise the splash becomes one "touch anywhere" button.
+- **Onboarding** is one screen (`/onboarding`) and one short conversation:
+  greeting, name, language, one-sentence consent ("Do you agree?"),
+  fingerprint (opens by itself), "You're all set". Progress shown as 4 steps.
+  Voice first; each step also has one small control (type the name, tap a
+  language, I agree, register). Re-asks only after real silence; when speech
+  recognition is unavailable it asks once and the controls take over.
+
 ## 10 November 2026: voice only, from opening to payment
 
 Avenza is meant to be used without touching the screen (blind and low-vision

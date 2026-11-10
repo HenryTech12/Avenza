@@ -99,7 +99,7 @@ override the ConfigMap) and uses the `regcred` pull secret automatically.
 ## How Avenza is used (product rule, 10 Nov)
 
 Voice only, nothing to type or find: splash 5 s, then Avenza talks; onboarding
-(language, consent "I agree", name, fingerprint) is asked and answered by voice;
+(`/onboarding`: greeting, name, language, consent "I agree", fingerprint) is one spoken conversation;
 the mic stays on on every screen; "open settings", "what is my balance", "speak
 Yoruba" work by voice. The only touches a browser can force are the first touch
 for sound (not needed once installed on the home screen) and, on some browsers,

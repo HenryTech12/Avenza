@@ -31,7 +31,7 @@ export function listenFor(
   language: string,
   onText: (text: string) => boolean,
   onHeard?: (text: string) => void,
-  opts: { rounds?: number; onGiveUp?: () => void } = {},
+  opts: { rounds?: number; onGiveUp?: (why: 'silence' | 'unavailable') => void } = {},
 ): () => void {
   const C = ctor()
   if (!C) return () => undefined
@@ -41,8 +41,12 @@ export function listenFor(
   let rec: Rec | null = null
   const maxRounds = opts.rounds ?? 8
   let matched = false
+  let unavailable = false
+  let gaveUp = false
   const giveUp = () => {
-    if (!matched) opts.onGiveUp?.()
+    if (matched || gaveUp) return
+    gaveUp = true
+    opts.onGiveUp?.(unavailable ? 'unavailable' : 'silence')
   }
   const run = () => {
     if (stopped) return
@@ -65,7 +69,9 @@ export function listenFor(
       }
     }
     rec.onerror = (e) => {
-      if (e.error === 'not-allowed' || e.error === 'service-not-allowed' || e.error === 'audio-capture') {
+      if (e.error === 'not-allowed' || e.error === 'service-not-allowed' || e.error === 'audio-capture' || e.error === 'network') {
+        // no microphone, not allowed, or the recogniser cannot be reached: asking again will not help
+        unavailable = true
         stopped = true
         giveUp()
       }
@@ -78,6 +84,7 @@ export function listenFor(
     try {
       rec.start()
     } catch {
+      unavailable = true
       stopped = true
       giveUp()
     }
@@ -150,10 +157,11 @@ export function ask(opts: {
     opts.onListening?.(true)
     stopListening = listenFor(opts.lang, opts.onText, opts.onHeard, {
       rounds: 3,
-      onGiveUp: () => {
+      onGiveUp: (why) => {
         opts.onListening?.(false)
         if (stopped) return
-        if (n + 1 < (opts.tries ?? 4)) void cycle(n + 1)
+        // Only ask again after real silence; if listening does not work at all, the screen's controls take over.
+        if (why === 'silence' && n + 1 < (opts.tries ?? 4)) void cycle(n + 1)
         else opts.onGiveUp?.()
       },
     })

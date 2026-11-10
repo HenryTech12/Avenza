@@ -47,7 +47,7 @@ export class PromptCache {
   }
 
   /** Fetch the manifest and decode every clip for `lang` (and English as fallback). */
-  async load(ctx: AudioContext, lang: Lang): Promise<void> {
+  async load(ctx: BaseAudioContext, lang: Lang): Promise<void> {
     const res = await fetch('/prompts/manifest.json', { cache: 'no-cache' })
     if (!res.ok) throw new Error(`prompt manifest ${res.status}`)
     this.manifest = manifestSchema.parse(await res.json())
