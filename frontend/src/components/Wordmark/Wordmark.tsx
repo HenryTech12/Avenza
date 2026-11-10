@@ -15,11 +15,7 @@ export function Wordmark({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) {
       devPanelOpen.value = true
     }
   }
-  const inner = (
-    <>
-      Avenza<span class={styles.dot} aria-hidden="true" />
-    </>
-  )
+  const inner = <span aria-hidden="true">AVENZA</span>
   return env.DEV_PANEL ? (
     <button type="button" class={`${styles.mark} ${styles[size]} ${styles.btn}`} onClick={onTap} aria-label="Avenza">
       {inner}

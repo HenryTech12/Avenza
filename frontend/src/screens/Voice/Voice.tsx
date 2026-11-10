@@ -8,10 +8,12 @@ import { Sheet } from '../../components/Sheet/Sheet'
 import { BigButton } from '../../components/BigButton/BigButton'
 import {
   uiState, errorOverlay, connection, simulated, transcript, partialTranscript, flags, startVoice, stopVoice,
-  showLatency, lastLatency, lockTransfers, dismissError, retryConnection, duplicateNotice, dismissDuplicate,
+  showLatency, lastLatency, dismissError, retryConnection, duplicateNotice, dismissDuplicate,
   retryMic, unclearReply,
 } from '../../session/session'
 import { Panels } from './Panels'
+import { Home } from './Home'
+import { BottomNav } from '../../components/BottomNav/BottomNav'
 import { MicHelp } from './MicHelp'
 import { t } from '../../i18n'
 import styles from './Voice.module.css'
@@ -39,17 +41,19 @@ export function Voice() {
   const showTranscript = flags.showTranscript && (ui === 'listening' || ui === 'hearing' || ui === 'checking' || ui === 'readback')
   const live = ui === 'hearing' ? partialTranscript.value : transcript.value
   const micDenied = err?.code === 'mic_denied'
+  // No transfer in progress: show the home screen. A transfer takes over the whole screen.
+  const atHome = ui === 'listening' || ui === 'hearing' || ui === 'checking'
 
   return (
     <main class={`page ${styles.voice}`}>
       <header class={styles.top}>
-        <Link href="/settings" class={styles.iconBtn} aria-label={t('common.settings')}>
-          <Icon name="settings" />
-        </Link>
         <Wordmark size="sm" />
         <div class={styles.right}>
           <ConnectionDot />
           {simulated.value ? <SimulatedBadge /> : null}
+          <Link href="/settings" class={styles.iconBtn} aria-label={t('common.settings')}>
+            <Icon name="user" />
+          </Link>
         </div>
       </header>
 
@@ -61,22 +65,19 @@ export function Voice() {
 
       {micDenied ? (
         <MicHelp onRetry={retryMic} />
+      ) : atHome ? (
+        <Home />
       ) : (
         <>
           <Panels />
           <div class={styles.transcript}>
-            {showTranscript ? <TranscriptLine text={live} partial={ui === 'hearing'} /> : null}
+            {showTranscript ? <TranscriptLine text={live} partial={false} /> : null}
             {unclearReply.value && ui === 'readback' ? <p class={styles.unclear}>{t('hint.unclear')}</p> : null}
           </div>
         </>
       )}
 
-      {flags.emergencyLock && !micDenied ? (
-        <button type="button" class={styles.lock} onClick={lockTransfers}>
-          <Icon name="lock" size={18} />
-          {t('voice.lock')}
-        </button>
-      ) : null}
+      {atHome || micDenied ? <BottomNav active="home" /> : null}
 
       {err && !micDenied ? <ErrorSheet code={err.code} /> : null}
       {duplicateNotice.value ? (

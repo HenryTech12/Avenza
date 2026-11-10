@@ -76,6 +76,18 @@ export const duplicateNotice = signal<{ amount: string; name: string; when: stri
 export const scamPauseUntil = signal(0)
 export const updateAvailable = signal(false)
 export const toast = signal<string | null>(null)
+/** The last few lines of the conversation, for the chat bubbles on the home screen. Never persisted. */
+export type ChatLine = { who: 'avenza' | 'you'; text: string; at: number }
+export const conversation = signal<ChatLine[]>([])
+export function addChat(who: ChatLine['who'], text: string): void {
+  const clean = text.trim()
+  if (!clean) return
+  // peek(): this runs inside effects (prompt playback); reading .value there would subscribe and loop
+  const current = conversation.peek()
+  const last = current[current.length - 1]
+  if (last && last.who === who && last.text === clean) return
+  conversation.value = [...current, { who, text: clean, at: Date.now() }].slice(-6)
+}
 export const lastAnswerTransferId = computed(() => machine.value.transferId)
 
 export const simulated = computed(() => bankMode.value === 'mock' || bankMode.value === 'sandbox')
@@ -105,6 +117,8 @@ function announce(text: string) {
 }
 
 function playPrompt(id: string): Promise<void> {
+  const said = prompts.textOf(id, language.value)
+  if (said) addChat('avenza', said)
   if (!audioRunning.value) return Promise.resolve()
   const r = prompts.resolve(id, language.value)
   if (!r) return Promise.resolve()
@@ -397,6 +411,7 @@ function waitForServer(): void {
 const serverVoices = () => env.BACKEND_MODE === 'live'
 
 function speakServerText(text: string): void {
+  addChat('avenza', text)
   announce(text)
   if (audioRunning.value) void player.speak(text, localeFor(language.value), 'server-speech')
 }
@@ -407,6 +422,7 @@ async function playClip(msg: Extract<ServerMessage, { type: 'prompt.play' }>): P
     return
   }
   if (msg.warnings) readbackWarnings.value = msg.warnings
+  if (msg.text) addChat('avenza', msg.text)
   if (msg.audio) {
     // server-synthesised speech, in order with everything else
     if (msg.text) announce(msg.text)
@@ -445,6 +461,7 @@ function onServer(msg: ServerMessage): void {
       dispatch({ type: 'TRANSCRIPT_PARTIAL', text: msg.text })
       break
     case 'transcript.final':
+      addChat('you', msg.text)
       dispatch({ type: 'TRANSCRIPT_FINAL', text: msg.text })
       break
     case 'prompt.play':
@@ -595,6 +612,13 @@ export async function shareReceipt(): Promise<boolean> {
   } catch {
     return false
   }
+}
+
+/** Say something in the device voice and show it as Avenza's bubble (quick actions on the home screen). */
+export function sayLocally(text: string): void {
+  addChat('avenza', text)
+  announce(text)
+  if (audioRunning.value) void player.speak(text, localeFor(language.value), 'local')
 }
 
 export async function copyReference(): Promise<void> {
@@ -752,10 +776,19 @@ export async function chooseLanguage(code: Lang): Promise<void> {
   void prompts.load(getAudioContext(), code).catch(() => undefined)
 }
 
-export function speakConsent(): void {
+export function speakConsent(): Promise<void> {
   player.stop()
-  void playPrompt('consent_read')
+  return playPrompt('consent_read')
 }
+
+/** Speak one line in the device voice (onboarding: no server session yet). Resolves when it has been said. */
+export function speakLine(text: string): Promise<void> {
+  if (!audioRunning.value) return Promise.resolve()
+  return player.speak(text, localeFor(language.value), 'onboarding')
+}
+
+/** The browser locale for spoken answers in the current language. */
+export const answerLocale = () => localeFor(language.value)
 
 export function stopSpeaking(): void {
   player.stop()

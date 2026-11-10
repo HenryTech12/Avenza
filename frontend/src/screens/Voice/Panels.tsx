@@ -128,19 +128,23 @@ function FingerprintPanel() {
   return (
     <>
       <section class={styles.center} data-panel="fingerprint">
-        <span class={styles.fpIcon}>
-          <Icon name="fingerprint" size={72} />
-        </span>
-        <StatusPanel status={t('status.fingerprint')} line={d ? t('voice.summary', { amount: formatNaira(d.amountKobo), name: d.recipientName }) : t('hint.fingerprint')} />
-        <CountdownRing deadline={fingerprintDeadline.value} totalMs={timeouts.fingerprintMs} />
-        <p class="muted">{t('hint.fingerprint')}</p>
+        <div class={styles.verifyCard}>
+          <span class={styles.fpRing}>
+            <span class={styles.fpIcon}>
+              <Icon name="fingerprint" size={64} />
+            </span>
+          </span>
+          <p class={styles.verifyKicker}>{t('verify.title')}</p>
+          <StatusPanel status={t('status.fingerprint')} line={t('verify.body')} />
+          {d ? (
+            <p class={styles.verifySummary}>{t('voice.summary', { amount: formatNaira(d.amountKobo), name: d.recipientName })}</p>
+          ) : null}
+          <CountdownRing deadline={fingerprintDeadline.value} totalMs={timeouts.fingerprintMs} />
+          <p class="muted">{t('verify.use')}</p>
+          {retry ? <BigButton onClick={retryFingerprint}>{t('voice.tryAgain')}</BigButton> : null}
+          <button type="button" class="text-button" onClick={cancel}>{t('voice.cancel')}</button>
+        </div>
       </section>
-      <div class="page-bottom">
-        {retry ? <BigButton onClick={retryFingerprint}>{t('voice.tryAgain')}</BigButton> : null}
-        <BigButton variant="secondary" onClick={cancel}>
-          {t('voice.cancel')}
-        </BigButton>
-      </div>
     </>
   )
 }
@@ -162,10 +166,12 @@ function ResultPanel() {
     return (
       <>
         <section class={styles.center} data-panel="settled">
-          <StatusPanel icon="check" tone="success" status={t('status.settled')} line={null} />
-          <AmountDisplay amountKobo={d.amountKobo} />
+          <span class={styles.successMark} aria-hidden="true">
+            <Icon name="check" size={52} />
+          </span>
+          <StatusPanel status={t('status.settled')} line={null} />
+          <p class="muted">{t('success.body', { amount: formatNaira(d.amountKobo), name: d.recipientName })}</p>
           <dl class={styles.receipt}>
-            <div><dt>{t('voice.resultTo')}</dt><dd>{d.recipientName}</dd></div>
             <div><dt>{t('voice.resultBank')}</dt><dd class="tabular">{d.bankName} · {d.accountMasked}</dd></div>
             {d.reference ? (
               <div>
@@ -178,14 +184,14 @@ function ResultPanel() {
                 </dd>
               </div>
             ) : null}
-            <div><dt>{t('voice.resultTime')}</dt><dd>{formatTime(when.current)}</dd></div>
+            <div><dt>{t('success.date')}</dt><dd>{formatTime(when.current)}</dd></div>
           </dl>
         </section>
         <div class="page-bottom">
+          <BigButton onClick={dismissResult}>{t('voice.done')}</BigButton>
           <BigButton variant="secondary" onClick={() => void shareReceipt()}>
             <Icon name="share" size={20} /> {t('voice.share')}
           </BigButton>
-          <BigButton onClick={dismissResult}>{t('voice.done')}</BigButton>
         </div>
       </>
     )

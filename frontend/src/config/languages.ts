@@ -15,9 +15,11 @@ export const languages: LanguageInfo[] = [
   { code: 'ig', name: 'Igbo', english: 'Igbo', enabled: false, speechLocale: 'ig-NG' },
 ]
 
+// The processors the deployed backend really uses (10 Nov 2026). Keep in step with .env.forge.
 export const speechProviders = [
-  'Google Cloud Speech-to-Text',
-  'Anthropic Claude (language understanding)',
-  'A text-to-speech provider',
+  'Intron Sahara and YarnGPT (speech-to-text)',
+  'YarnGPT (Avenza\'s voice)',
+  'Huawei Cloud (language understanding)',
+  "your browser's speech recognition, only while you set up",
 ]
-export const CONSENT_VERSION = '2026-11-v1'
+export const CONSENT_VERSION = '2026-11-v2' // v2: real provider list, browser speech during set-up
