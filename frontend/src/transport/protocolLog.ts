@@ -10,6 +10,8 @@ export interface LogEntry {
 export const protocolLog = signal<LogEntry[]>([])
 
 export function logMessage(dir: 'in' | 'out', type: string): void {
-  const next = [...protocolLog.value, { dir, type, at: Date.now() }]
+  // peek(): send() is called from effects (reconnect -> session.start). Reading .value there subscribed
+  // the effect to this log, so writing it threw "Cycle detected" before the message went out.
+  const next = [...protocolLog.peek(), { dir, type, at: Date.now() }]
   protocolLog.value = next.length > 50 ? next.slice(next.length - 50) : next
 }
