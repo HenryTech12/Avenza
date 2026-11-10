@@ -72,10 +72,12 @@ class ModalYarnGPTTTS(TTSProvider):
         text = (text or "").strip()
         if len(text) < self.MIN_CHARS:
             raise ProviderError("nothing to synthesize")
-        client = self._client or httpx.AsyncClient(timeout=httpx.Timeout(timeout or self.timeout, connect=10.0))
+        # Modal answers a request that runs past 150 s (a cold GPU start) with 303 See Other and a URL
+        # where the result can be collected; following it is how the result is fetched (10 Nov).
+        client = self._client or httpx.AsyncClient(timeout=httpx.Timeout(timeout or self.timeout, connect=10.0), follow_redirects=True)
         t0 = time.perf_counter()
         try:
-            resp = await client.post(self.url, json=self.payload(text, voice, language))
+            resp = await client.post(self.url, json=self.payload(text, voice, language), follow_redirects=True)
         except httpx.HTTPError as exc:
             self.last_error = f"{type(exc).__name__} after {(time.perf_counter() - t0) * 1000:.0f} ms"
             raise ProviderError(f"yarngpt-modal: {self.last_error}") from exc

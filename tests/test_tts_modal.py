@@ -151,3 +151,18 @@ async def test_orchestrator_prewarm_uses_the_cache_path(services):
     o.tts = Split()
     await o.prewarm_tts()
     assert used and set(used) == {"cache"}
+
+
+async def test_a_long_cold_start_303_is_followed_to_the_result():
+    """Probe 10 Nov: the first call on a new L4 container ran past 150 s and Modal answered 303."""
+    calls = []
+
+    def handler(req):
+        calls.append((req.method, req.url.path))
+        if req.method == "POST":
+            return httpx.Response(303, headers={"location": "https://team--yarngpt-yarngpt-tts.us-east.modal.run/__result/fc-1"})
+        return httpx.Response(200, content=pcm_to_wav_bytes(tone_pcm(0.1, 24000), 24000), headers={"content-type": "audio/wav"})
+
+    res = await modal_with(handler).synthesize("Hello there", None, "en")
+    assert calls == [("POST", "/"), ("GET", "/__result/fc-1")]
+    assert res.sample_rate == 24000 and res.pcm
