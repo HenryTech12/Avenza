@@ -131,7 +131,8 @@ class Settings:
     tts_cache_size: int = 256
     # Answer in the language the customer speaks (beta). Languages Avenza may switch to;
     # BETA_LANGUAGES are marked beta in the app and announced as such.
-    language_detection: bool = True
+    # Off by default (10 Nov): the language the customer chose is kept; only "speak Yoruba" changes it.
+    language_detection: bool = False
     switch_languages: str = "en,ha,ig,yo"
     beta_languages: str = "ha,ig,yo"
     # Synthesise every fixed prompt once at startup so only read-backs wait for TTS.
@@ -281,7 +282,7 @@ def load_settings() -> Settings:
         latency_log=os.getenv("LATENCY_LOG", "reports/latency.jsonl"),
         tts_timeout_s=_float("TTS_TIMEOUT_S", 6.0),
         tts_cache_size=_int("TTS_CACHE_SIZE", 256),
-        language_detection=_bool("LANGUAGE_DETECTION", True),
+        language_detection=_bool("LANGUAGE_DETECTION", False),
         switch_languages=os.getenv("SWITCH_LANGUAGES", "en,ha,ig,yo"),
         beta_languages=os.getenv("BETA_LANGUAGES", "ha,ig,yo"),
         tts_prewarm=_bool("TTS_PREWARM", True),

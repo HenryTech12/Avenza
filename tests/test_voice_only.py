@@ -67,7 +67,10 @@ async def test_saying_a_language_switches_replies_and_marks_beta(services):
 
 
 async def test_detected_language_switches_then_the_request_still_runs(services):
+    import dataclasses
+
     o = services["orchestrator"]
+    o.settings = dataclasses.replace(o.settings, language_detection=True)  # opt-in since 10 Nov
     c = make_customer(services)
     events = await o.process_text(c.ctx, "Ina son in aika naira dubu biyar zuwa GTBank")
     assert c.ctx.language == "ha"
@@ -125,3 +128,33 @@ async def test_balance_never_invents_a_number(services):
 def test_new_english_lines_are_long_enough_for_yarngpt():
     for key in ("balance_unavailable", "nav_home", "nav_settings", "language_switched", "language_beta"):
         assert len(PROMPTS["en"][key]) >= 20
+
+
+async def test_the_chosen_language_is_kept_when_the_customer_speaks_english(services):
+    """10 Nov: a customer who chose Yoruba but says the request in English still hears Yoruba."""
+    o = services["orchestrator"]
+    c = make_customer(services)
+    c.ctx.language = "yo"
+    events = await o.process_text(c.ctx, "Send five thousand naira to GTBank account 0123987001")
+    assert c.ctx.language == "yo"
+    assert not any(e["type"] == "language.changed" for e in events)
+    spoken = [e for e in events if e.get("type") == "prompt.play"]
+    assert spoken and all(e["language"] == "yo" for e in spoken)
+
+
+def test_cancel_in_local_languages():
+    for word in ("fagile", "soke", "kagbuo"):
+        assert keyword_intent(word).intent == Intent.CANCEL
+
+
+def test_every_reply_exists_in_every_language_with_the_same_placeholders():
+    """10 Nov: a Yoruba customer heard English when a reply had no Yoruba version."""
+    import string
+
+    def fields(t):
+        return {f for _, f, _, _ in string.Formatter().parse(t) if f}
+
+    for lang in ("yo", "ha", "ig"):
+        for key, text in PROMPTS["en"].items():
+            assert key in PROMPTS[lang], (lang, key)
+            assert fields(PROMPTS[lang][key]) == fields(text), (lang, key)

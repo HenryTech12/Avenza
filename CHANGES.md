@@ -4,6 +4,19 @@ All 481 tests pass (415 existing + 66 new in `tests/test_fixes.py`). 51 of the
 new tests fail on the previous code, which shows they catch the defects below.
 
 
+## 10 November 2026 (late): replies always in the chosen language
+
+- The language chosen in onboarding (or by saying "speak Yoruba") is kept.
+  Automatic detection is now off by default (`LANGUAGE_DETECTION=true` to turn
+  it on): a customer who chose Yoruba but says the request in English still
+  hears Yoruba.
+- Every server reply now exists in Yoruba, Hausa and Igbo (20 were missing and
+  fell back to English, e.g. "I could not find that account"); a test keeps it so.
+- The app's own short lines (yes/no/repeat, fingerprint retry, connection and
+  error messages, warnings) are served in the chosen language too.
+- "Cancel" in Yoruba, Hausa and Igbo (fagilé, soke, kagbuo).
+- All Hausa/Igbo/Yoruba text is unverified: a native-speaker check is needed.
+
 ## 10 November 2026 (late): the chosen language from the first word; phone fixes
 
 Phone test: Yoruba chosen, but onboarding, "checking with your bank" and "I'm

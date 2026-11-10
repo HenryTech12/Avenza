@@ -171,7 +171,10 @@ function playFiller(): void {
 }
 
 /** Fillers the app speaks itself, fetched in the customer's language when it is not English. */
-const APP_LINE_PROMPTS = new Set(['checking_bank', 'no_speech_hint'])
+const APP_LINE_PROMPTS = new Set([
+  'checking_bank', 'no_speech_hint', 'say_yes_no_repeat', 'fingerprint_retry', 'err_offline', 'err_connection_lost',
+  'err_mic_denied', 'err_provider_down', 'err_generic', 'scam_pause', 'duplicate_warning',
+])
 
 function playPrompt(id: string): Promise<void> {
   if (language.value !== 'en' && APP_LINE_PROMPTS.has(id)) {

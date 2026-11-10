@@ -183,6 +183,10 @@ _CANCEL = {
     "stop",
     "forget it",
     "leave it",
+    # Yoruba / Hausa / Igbo "cancel" (beta)
+    "fagile",
+    "soke",
+    "kagbuo",
 }
 _POLITE = {"please", "abeg", "now", "o", "jare", "and", "then", "alright", "right"}
 _YES_FILLER = {word for phrase in _YES for word in phrase.split()} | _POLITE
