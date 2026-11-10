@@ -68,6 +68,9 @@ export type ServerMessage =
   | { type: 'error'; code: string; promptId: string; message?: string }
   | { type: 'session.ready'; language: string; languageVerified: boolean; bankSimulated: boolean; approvalTtlS: number | null }
   | { type: 'lock.changed'; locked: boolean }
+  | { type: 'navigate'; screen: 'home' | 'history' | 'settings' }
+  | { type: 'language.changed'; language: string; beta: boolean }
+  | { type: 'balance'; availableKobo: number; availableDisplay?: string }
 
 export interface AudioChunk {
   pcm: Int16Array

@@ -1,6 +1,8 @@
-import { useEffect, useRef } from 'preact/hooks'
+import { useEffect, useRef, useState } from 'preact/hooks'
 import { useLocation } from 'preact-iso'
-import { languages, chooseLanguage, language } from '../../session/session'
+import { languages, chooseLanguage, language, audioRunning, speakLine } from '../../session/session'
+import { listenFor, languageFrom, voiceAnswersSupported } from '../../audio/listen'
+import { Icon } from '../../components/Icon/Icon'
 import { t } from '../../i18n'
 import type { Lang } from '../../protocol/messages'
 import styles from './Language.module.css'
@@ -10,12 +12,37 @@ const titles = ['Choose your language', 'Yan èdè rẹ', 'Zaɓi harshenka', 'H�
 export function Language() {
   const { route } = useLocation()
   const heading = useRef<HTMLHeadingElement>(null)
+  const [listening, setListening] = useState(false)
+  const picked = useRef(false)
   useEffect(() => heading.current?.focus({ preventScroll: true }), [])
 
   const pick = async (code: Lang) => {
+    if (picked.current) return
+    picked.current = true
     await chooseLanguage(code)
     route('/onboarding/consent')
   }
+
+  // Onboarding by voice: Avenza asks, the customer says the language. Tapping a tile still works.
+  useEffect(() => {
+    if (!audioRunning.value || !voiceAnswersSupported()) return
+    let alive = true
+    let stop = () => undefined as void
+    void speakLine(t('onboard.askLanguage')).then(() => {
+      if (!alive) return
+      setListening(true)
+      stop = listenFor('en-NG', (text) => {
+        const code = languageFrom(text)
+        if (!code) return false
+        void pick(code)
+        return true
+      })
+    })
+    return () => {
+      alive = false
+      stop()
+    }
+  }, [audioRunning.value])
 
   return (
     <main class="page">
@@ -41,10 +68,15 @@ export function Language() {
             onClick={() => pick(l.code)}
           >
             <span class={styles.name}>{l.name}</span>
-            {!l.enabled ? <span class={styles.soon}>{t('language.comingSoon')}</span> : null}
+            {!l.enabled ? <span class={styles.soon}>{t('language.comingSoon')}</span> : l.beta ? <span class={styles.soon}>Beta</span> : null}
           </button>
         ))}
       </div>
+      {listening ? (
+        <p class={styles.voiceHint} aria-live="polite">
+          <Icon name="wave" size={18} /> {t('onboard.sayLanguage')}
+        </p>
+      ) : null}
     </main>
   )
 }

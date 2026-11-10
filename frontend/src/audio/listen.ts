@@ -27,9 +27,10 @@ export const voiceAnswersSupported = () => ctor() !== null
  * Listen until `onText` returns true, the caller stops it, or it gives up (about a minute).
  * Returns a stop function. Errors such as "no microphone" or "not allowed" end it quietly.
  */
-export function listenFor(lang: string, onText: (text: string) => boolean, onHeard?: (text: string) => void): () => void {
+export function listenFor(language: string, onText: (text: string) => boolean, onHeard?: (text: string) => void): () => void {
   const C = ctor()
   if (!C) return () => undefined
+  let lang = language
   let stopped = false
   let rounds = 0
   let rec: Rec | null = null
@@ -47,6 +48,8 @@ export function listenFor(lang: string, onText: (text: string) => boolean, onHea
     }
     rec.onerror = (e) => {
       if (e.error === 'not-allowed' || e.error === 'service-not-allowed' || e.error === 'audio-capture') stopped = true
+      // Browsers without a Yoruba/Hausa/Igbo recogniser: listen in Nigerian English instead
+      if (e.error === 'language-not-supported' && lang !== 'en-NG') lang = 'en-NG'
     }
     rec.onend = () => {
       if (!stopped) setTimeout(run, 250)
@@ -69,11 +72,26 @@ export function listenFor(lang: string, onText: (text: string) => boolean, onHea
   return stop
 }
 
-/** "I agree", "yes I agree", "okay", "yes" count as agreeing; anything with "not" or "don't" does not. */
+const plain = (text: string) => text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+
+/**
+ * Agreeing, in English or (beta) Yoruba, Hausa or Igbo: "I agree", "yes", "mo gba", "na yarda", "ekwere m".
+ * Anything with a negation does not count.
+ */
 export function isAgreement(text: string): boolean {
-  const s = text.toLowerCase()
-  if (/\b(not|don't|do not|no)\b/.test(s)) return false
-  return /\b(i agree|agree|agreed|yes|okay|ok|accept)\b/.test(s)
+  const s = plain(text)
+  if (/\b(not|don't|do not|no|rara|a'a|aa|mba|ban yarda)\b/.test(s)) return false
+  return /\b(i agree|agree|agreed|yes|okay|ok|accept|mo gba|beeni|mo fara mo|na yarda|ekwere m|ekwenyere m|ee)\b/.test(s)
+}
+
+/** "English", "Yoruba please", "Hausa", "Igbo", "Turanci" -> the language code, else null. */
+export function languageFrom(text: string): 'en' | 'yo' | 'ha' | 'ig' | null {
+  const s = plain(text)
+  if (/\b(yoruba|yooba|yorba)\b/.test(s)) return 'yo'
+  if (/\b(hausa|housa|hausa language)\b/.test(s)) return 'ha'
+  if (/\b(igbo|ibo|eboh|igbo language)\b/.test(s)) return 'ig'
+  if (/\b(english|turanci|oyinbo|bekee)\b/.test(s)) return 'en'
+  return null
 }
 
 /** "My name is Ngozi Eze" -> "Ngozi Eze". */

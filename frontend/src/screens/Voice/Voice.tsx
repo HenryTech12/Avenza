@@ -1,4 +1,3 @@
-import { useEffect } from 'preact/hooks'
 import { Link } from './Link'
 import { Icon } from '../../components/Icon/Icon'
 import { Wordmark } from '../../components/Wordmark/Wordmark'
@@ -7,13 +6,14 @@ import { TranscriptLine } from '../../components/TranscriptLine/TranscriptLine'
 import { Sheet } from '../../components/Sheet/Sheet'
 import { BigButton } from '../../components/BigButton/BigButton'
 import {
-  uiState, errorOverlay, connection, simulated, transcript, partialTranscript, flags, startVoice, stopVoice,
+  uiState, errorOverlay, connection, simulated, transcript, partialTranscript, flags,
   showLatency, lastLatency, dismissError, retryConnection, duplicateNotice, dismissDuplicate,
   retryMic, unclearReply,
 } from '../../session/session'
 import { Panels } from './Panels'
 import { Home } from './Home'
 import { BottomNav } from '../../components/BottomNav/BottomNav'
+import { LanguageBadge } from '../../components/LanguageBadge/LanguageBadge'
 import { MicHelp } from './MicHelp'
 import { t } from '../../i18n'
 import styles from './Voice.module.css'
@@ -31,11 +31,6 @@ function ConnectionDot() {
 }
 
 export function Voice() {
-  useEffect(() => {
-    void startVoice()
-    return () => stopVoice()
-  }, [])
-
   const err = errorOverlay.value
   const ui = uiState.value
   const showTranscript = flags.showTranscript && (ui === 'listening' || ui === 'hearing' || ui === 'checking' || ui === 'readback')
@@ -50,6 +45,7 @@ export function Voice() {
         <Wordmark size="sm" />
         <div class={styles.right}>
           <ConnectionDot />
+          <LanguageBadge />
           {simulated.value ? <SimulatedBadge /> : null}
           <Link href="/settings" class={styles.iconBtn} aria-label={t('common.settings')}>
             <Icon name="user" />

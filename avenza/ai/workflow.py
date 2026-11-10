@@ -40,6 +40,9 @@ _AI_TO_BACKEND = {
 
 # Backend outcomes that are authoritative and must never be replaced.
 _DETERMINISTIC = {
+    Intent.BALANCE,
+    Intent.NAVIGATE,
+    Intent.LANGUAGE,
     Intent.LOCK,
     Intent.HELP,
     Intent.YES,

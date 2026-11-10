@@ -3,7 +3,7 @@ import { useLocation } from 'preact-iso'
 import { Icon, type IconName } from '../../components/Icon/Icon'
 import { ListeningOrb } from '../../components/ListeningOrb/ListeningOrb'
 import {
-  uiState, micLevel, isSpeaking, partialTranscript, hintGrown, conversation, sayLocally, lockTransfers, flags,
+  uiState, micLevel, isSpeaking, partialTranscript, hintGrown, conversation, sayLocally, lockTransfers, flags, lastBalance,
 } from '../../session/session'
 import { fetchBalance, fetchProfile, type Balance } from '../../session/account'
 import { formatNaira } from '../../lib/format'
@@ -47,6 +47,14 @@ export function Home() {
 
   const ui = uiState.value
   useEffect(() => statusRef.current?.focus({ preventScroll: true }), [ui])
+  // "What is my balance?" said out loud: show the bank's figure the voice just read.
+  const spoken = lastBalance.value
+  useEffect(() => {
+    if (!spoken) return
+    setBalance((b) => ({ ...(b ?? { currency: 'NGN' }), availableKobo: spoken.availableKobo, availableDisplay: spoken.availableDisplay }) as Balance)
+    setBalanceError(false)
+    setShowBalance(true)
+  }, [spoken])
   const status = ui === 'hearing' ? t('status.hearing') : ui === 'checking' ? t('status.checking') : t('status.listening')
   const amount = balance?.availableDisplay ?? (balance?.availableKobo != null ? formatNaira(balance.availableKobo) : null)
 
@@ -146,6 +154,8 @@ export function Home() {
           <p class="muted">{t('home.youCanSay')}:</p>
           <p>“{t('home.example1')}”</p>
           <p>“{t('home.example2')}”</p>
+          <p>“{t('home.example3')}”</p>
+          <p>“{t('home.example4')}”</p>
         </div>
       </section>
     </div>

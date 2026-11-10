@@ -25,6 +25,9 @@ class Intent(str, Enum):
     HISTORY = "HISTORY"
     LOCK = "LOCK"
     HELP = "HELP"
+    BALANCE = "BALANCE"
+    NAVIGATE = "NAVIGATE"  # reason is "screen:<home|history|settings>"
+    LANGUAGE = "LANGUAGE"  # reason is "language:<en|ha|ig|yo>"
     UNCLEAR = "UNCLEAR"
 
 
@@ -123,6 +126,37 @@ _HISTORY = {
     "show me",
     "check my",
 }
+# Voice-only app: everything on screen can be reached by saying it (10 Nov 2026).
+_BALANCE = {
+    "balance",
+    "my balance",
+    "account balance",
+    "check my balance",
+    "check balance",
+    "how much do i have",
+    "how much money do i have",
+    "how much is in my account",
+    "what is my balance",
+    "whats my balance",
+    # Hausa / Yoruba / Igbo (beta, unverified)
+    "kudi na nawa",
+    "nawa ne kudi na",
+    "elo lo wa ninu akanti mi",
+    "owo melo lo ku",
+    "ego ole di na akaunt m",
+}
+_NAVIGATE = {
+    "home": {"go home", "home screen", "take me home", "main menu", "go back", "back home", "close this"},
+    "settings": {"settings", "open settings", "go to settings", "my profile", "open my profile", "profile"},
+    "history": {"open transactions", "open my transactions", "go to transactions", "transactions page"},
+}
+_LANGUAGE_NAMES = {
+    "en": {"english", "turanci", "oyinbo", "bekee"},
+    "ha": {"hausa"},
+    "ig": {"igbo"},
+    "yo": {"yoruba"},
+}
+_LANGUAGE_VERBS = {"speak", "switch", "change", "use", "talk", "in", "language", "please", "to", "yi", "fi", "na", "me"}
 _HELP = {
     "help",
     "what can you do",
@@ -258,6 +292,31 @@ def _is_confirmation(norm: str, phrases: set[str], filler: set[str]) -> bool:
     return bool(tokens) and all(token in filler for token in tokens)
 
 
+def navigation_target(text: str) -> str | None:
+    """"open settings" -> "settings". None when the words are not a navigation request."""
+    for screen, phrases in _NAVIGATE.items():
+        if _phrase_in(text, phrases):
+            return screen
+    return None
+
+
+def language_request(text: str) -> str | None:
+    """"speak Yoruba", "switch to Hausa", "Igbo please" -> the language code.
+
+    Only short requests count: a language name inside a longer sentence
+    ("send money to my Igbo friend") is not a request to switch.
+    """
+    tokens = _tokens(text)
+    if not tokens or len(tokens) > 6:
+        return None
+    for code, names in _LANGUAGE_NAMES.items():
+        if any(name in tokens for name in names):
+            others = [t for t in tokens if t not in names]
+            if all(t in _LANGUAGE_VERBS or t in _POLITE for t in others):
+                return code
+    return None
+
+
 def keyword_intent(transcript: str, state: str | None = None) -> IntentResult:
     norm = _intent_norm(transcript)
     tokens = norm.split()
@@ -301,6 +360,14 @@ def keyword_intent(transcript: str, state: str | None = None) -> IntentResult:
     if state in _CONFIRMATION_STATES and has_negation:
         return IntentResult(Intent.NO, 0.85, "keyword", reason="negation during confirmation")
 
+    lang = language_request(transcript)
+    if lang:
+        return IntentResult(Intent.LANGUAGE, 0.97, "keyword", reason=f"language:{lang}")
+    if _phrase_in(transcript, _BALANCE):
+        return IntentResult(Intent.BALANCE, 0.97, "keyword")
+    screen = navigation_target(transcript)
+    if screen:
+        return IntentResult(Intent.NAVIGATE, 0.97, "keyword", reason=f"screen:{screen}")
     if _phrase_in(transcript, _HISTORY):
         return IntentResult(Intent.HISTORY, 0.95, "keyword")
     if _phrase_in(transcript, _HELP):

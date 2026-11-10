@@ -55,3 +55,11 @@
   font-size: var(--fs-label);
   color: var(--text-muted);
 }
+.voiceHint {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: var(--fs-label);
+}

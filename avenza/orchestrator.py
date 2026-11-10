@@ -11,7 +11,8 @@ from typing import TYPE_CHECKING, Awaitable, Callable
 
 from .bank import BANK_NAMES, BankAccountRestricted, BankAdapter, BankNotFound, BankUnavailable
 from .config import Settings
-from .intent import Intent, IntentClassifier
+from .intent import Intent, IntentClassifier, language_request
+from .langdetect import detect_language
 from .latency import LatencyLog, Turn
 from .money import format_naira
 from .parser import ParseError, extract_transfer_fields, normalize, parse_history_query
@@ -574,6 +575,17 @@ class TurnOrchestrator:
             ctx.unclear_count = max(0, ctx.unclear_count)
             events = self._expire_events(ctx)
             active = self.transfers.active_for_user(ctx.user_id)
+            # Answer in the language the customer speaks: an explicit "speak Yoruba",
+            # or (beta) the language detected in what they just said.
+            requested = language_request(text)
+            if requested and active is None:
+                events.extend(self._switch_language(ctx, requested, explicit=True))
+                events.append(self._listening())
+                return events
+            if self.settings.language_detection and active is None:
+                detected = detect_language(text, ctx.language)
+                if detected and detected != ctx.language and self._language_allowed(detected):
+                    events.extend(self._switch_language(ctx, detected, explicit=False))
             if active is not None:
                 ctx.active_transfer_id = active.id
             else:
@@ -645,11 +657,50 @@ class TurnOrchestrator:
             return events
 
     # ------------------------------------------------------------------
+    # Language
+    # ------------------------------------------------------------------
+    def _language_allowed(self, language: str) -> bool:
+        allowed = {x.strip() for x in self.settings.switch_languages.split(",") if x.strip()}
+        return language in allowed and self.prompts.language_supported(language)
+
+    def _switch_language(self, ctx: SessionContext, language: str, *, explicit: bool) -> list[dict]:
+        """Switch replies (and the next turn's speech-to-text) to ``language``."""
+        if language == ctx.language:
+            return [self._prompt(ctx, "language_switched")] if explicit else []
+        if not self._language_allowed(language):
+            return [self._prompt(ctx, "unsupported_language")] if explicit else []
+        previous, ctx.language = ctx.language, language
+        beta = language in {x.strip() for x in self.settings.beta_languages.split(",") if x.strip()}
+        logger.info("language %s -> %s (%s)", previous, language, "asked" if explicit else "detected")
+        events: list[dict] = [
+            {"type": "language.changed", "language": language, "previous": previous,
+             "beta": beta, "reason": "asked" if explicit else "detected"},
+            self._prompt(ctx, "language_switched"),
+        ]
+        if beta:
+            events.append(self._prompt(ctx, "language_beta"))
+        return events
+
+    # ------------------------------------------------------------------
     # No active transfer
     # ------------------------------------------------------------------
     async def _handle_no_active(self, ctx: SessionContext, text: str) -> list[dict]:
         result = await self._classify(text, state=None, language=ctx.language)
         events: list[dict] = []
+
+        if result.intent == Intent.BALANCE:
+            self._clear_active(ctx)
+            return await self._balance_events(ctx)
+
+        if result.intent == Intent.NAVIGATE:
+            self._clear_active(ctx)
+            screen = result.reason.removeprefix("screen:") or "home"
+            events.append({"type": "navigate", "screen": screen})
+            if screen == "history":
+                return events + await self._history_events(ctx, text)
+            events.append(self._prompt(ctx, "nav_settings" if screen == "settings" else "nav_home"))
+            events.append(self._listening())
+            return events
 
         if result.intent == Intent.LOCK:
             self.transfers.engage_lock(ctx.user_id, reason="voice_request")
@@ -661,7 +712,7 @@ class TurnOrchestrator:
 
         if result.intent == Intent.HISTORY:
             self._clear_active(ctx)
-            return await self._history_events(ctx, text)
+            return [{"type": "navigate", "screen": "history"}, *await self._history_events(ctx, text)]
 
         if result.intent == Intent.HELP:
             self._clear_active(ctx)
@@ -1095,6 +1146,25 @@ class TurnOrchestrator:
     # ------------------------------------------------------------------
     # History
     # ------------------------------------------------------------------
+    async def _balance_events(self, ctx: SessionContext) -> list[dict]:
+        """"What is my balance?": the bank's figure, spoken. Never a made-up number."""
+        events: list[dict] = []
+        get_balance = getattr(self.bank, "get_balance", None)
+        data = None
+        if get_balance is not None:
+            try:
+                data = await asyncio.wait_for(get_balance(self.transfers.customer_ref_for(ctx.user_id)), 8.0)
+            except Exception as exc:  # noqa: BLE001 - say we could not get it
+                logger.info("balance unavailable: %s", type(exc).__name__)
+        available = (data or {}).get("available_kobo")
+        if available is None:
+            events.append(self._prompt(ctx, "balance_unavailable"))
+        else:
+            events.append({"type": "balance", "available_kobo": available, "available_display": format_naira(available)})
+            events.append(self._prompt(ctx, "balance", amount=format_naira(available)))
+        events.append(self._listening())
+        return events
+
     async def _history_events(self, ctx: SessionContext, text: str) -> list[dict]:
         """Spoken history from Avenza's own records plus the bank's ledger.
 

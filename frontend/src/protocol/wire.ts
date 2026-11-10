@@ -74,6 +74,10 @@ const wire = z.discriminatedUnion('type', [
     approval_ttl_s: z.number().optional(),
   }),
   z.looseObject({ type: z.literal('lock.changed'), locked: z.boolean() }),
+  // Voice-only use (10 Nov 2026)
+  z.looseObject({ type: z.literal('navigate'), screen: z.enum(['home', 'history', 'settings']) }),
+  z.looseObject({ type: z.literal('language.changed'), language: z.string(), beta: z.boolean().optional() }),
+  z.looseObject({ type: z.literal('balance'), available_kobo: z.number(), available_display: z.string().optional() }),
 ])
 
 const known = new Set(wire.options.map((o) => o.shape.type.value as string))
@@ -188,5 +192,11 @@ export function parseWireMessage(raw: unknown): WireParse {
       }
     case 'lock.changed':
       return { ok: true, msg: { type: 'lock.changed', locked: m.locked } }
+    case 'navigate':
+      return { ok: true, msg: { type: 'navigate', screen: m.screen } }
+    case 'language.changed':
+      return { ok: true, msg: { type: 'language.changed', language: m.language, beta: m.beta ?? false } }
+    case 'balance':
+      return { ok: true, msg: { type: 'balance', availableKobo: m.available_kobo, availableDisplay: m.available_display } }
   }
 }

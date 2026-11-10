@@ -250,6 +250,54 @@ PROMPTS: dict[str, dict[str, str]] = {
 }
 
 
+# Voice-only navigation, balance and language switching (10 Nov 2026).
+# Hausa, Igbo and Yoruba lines are unverified translations: beta until a native speaker checks them.
+_VOICE_ONLY: dict[str, dict[str, str]] = {
+    "en": {
+        "balance": "Your available balance is {amount}.",
+        "balance_unavailable": "I cannot get your balance from the bank right now.",
+        "nav_home": "Back to the home screen.",
+        "nav_settings": "Opening your settings now.",
+        "language_switched": "I will speak English with you from now on.",
+        "language_beta": "This language is still in beta, so please check what I say.",
+    },
+    "yo": {
+        "balance": "Owó tó wà nínú àkáǹtì rẹ jẹ́ {amount}.",
+        "balance_unavailable": "N kò lè rí iye owó rẹ láti ọ̀dọ̀ báǹkì báyìí.",
+        "nav_home": "A ti padà sí ojú-ìwé àkọ́kọ́.",
+        "nav_settings": "Mo ń ṣí àwọn ètò rẹ báyìí.",
+        "language_switched": "Màá máa bá ọ sọ Yorùbá láti ìsinsìnyí lọ.",
+        "language_beta": "Èdè yìí ṣì wà ní ìdánwò, jọ̀wọ́ ṣàyẹ̀wò ohun tí mo sọ.",
+    },
+    "ha": {
+        "balance": "Kuɗin da ke cikin asusunka shine {amount}.",
+        "balance_unavailable": "Ba zan iya samun kuɗinka daga banki yanzu ba.",
+        "nav_home": "Mun koma shafin farko na Avenza.",
+        "nav_settings": "Ina buɗe saitunanka yanzu.",
+        "language_switched": "Daga yanzu zan yi magana da kai da Hausa.",
+        "language_beta": "Wannan harshe yana cikin gwaji, don Allah ka duba abin da na faɗa.",
+    },
+    "ig": {
+        "balance": "Ego dị na akaụntụ gị bụ {amount}.",
+        "balance_unavailable": "Enweghị m ike ịnweta ego gị n'aka ụlọ akụ ugbu a.",
+        "nav_home": "Anyị laghachiri na ihuenyo mbụ.",
+        "nav_settings": "M na-emeghe ntọala gị ugbu a.",
+        "language_switched": "Site ugbu a, m ga-asụ Igbo gị.",
+        "language_beta": "Asụsụ a ka nọ na nnwale, biko lelee ihe m kwuru.",
+    },
+    "pcm": {
+        "balance": "Your balance na {amount}.",
+        "balance_unavailable": "I no fit get your balance from bank now.",
+        "nav_home": "We don go back to home screen.",
+        "nav_settings": "I dey open your settings now.",
+        "language_switched": "From now I go dey talk Pidgin with you.",
+        "language_beta": "This language still dey test, abeg check wetin I talk.",
+    },
+}
+for _lang, _lines in _VOICE_ONLY.items():
+    PROMPTS[_lang].update(_lines)
+
+
 @dataclass(frozen=True)
 class Prompt:
     id: str

@@ -129,6 +129,11 @@ class Settings:
     latency_log: str = "reports/latency.jsonl"
     tts_timeout_s: float = 6.0
     tts_cache_size: int = 256
+    # Answer in the language the customer speaks (beta). Languages Avenza may switch to;
+    # BETA_LANGUAGES are marked beta in the app and announced as such.
+    language_detection: bool = True
+    switch_languages: str = "en,ha,ig,yo"
+    beta_languages: str = "ha,ig,yo"
     # Synthesise every fixed prompt once at startup so only read-backs wait for TTS.
     tts_prewarm: bool = True
     tts_prewarm_languages: str = "en"
@@ -265,6 +270,9 @@ def load_settings() -> Settings:
         latency_log=os.getenv("LATENCY_LOG", "reports/latency.jsonl"),
         tts_timeout_s=_float("TTS_TIMEOUT_S", 6.0),
         tts_cache_size=_int("TTS_CACHE_SIZE", 256),
+        language_detection=_bool("LANGUAGE_DETECTION", True),
+        switch_languages=os.getenv("SWITCH_LANGUAGES", "en,ha,ig,yo"),
+        beta_languages=os.getenv("BETA_LANGUAGES", "ha,ig,yo"),
         tts_prewarm=_bool("TTS_PREWARM", True),
         tts_prewarm_languages=os.getenv("TTS_PREWARM_LANGUAGES", "en"),
         tts_prewarm_concurrency=_int("TTS_PREWARM_CONCURRENCY", 2),

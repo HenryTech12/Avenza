@@ -76,6 +76,13 @@ export const duplicateNotice = signal<{ amount: string; name: string; when: stri
 export const scamPauseUntil = signal(0)
 export const updateAvailable = signal(false)
 export const toast = signal<string | null>(null)
+/** Where the voice asked to go ("open settings"); the app routes there and clears it. */
+export const navRequest = signal<string | null>(null)
+/** True while Avenza speaks a language that has not passed the native-speaker test. */
+export const languageBeta = signal(false)
+/** The last balance the bank gave by voice ("what is my balance"). */
+export const lastBalance = signal<{ availableKobo: number; availableDisplay: string } | null>(null)
+
 /** The last few lines of the conversation, for the chat bubbles on the home screen. Never persisted. */
 export type ChatLine = { who: 'avenza' | 'you'; text: string; at: number }
 export const conversation = signal<ChatLine[]>([])
@@ -497,6 +504,18 @@ function onServer(msg: ServerMessage): void {
       break
     case 'lock.changed':
       locked.value = msg.locked
+      break
+    case 'navigate':
+      // "open settings", "show my transactions", "go home": the app follows the voice
+      navRequest.value = msg.screen === 'home' ? '/' : `/${msg.screen}`
+      break
+    case 'language.changed':
+      // Avenza heard (or was asked for) another language: the screen follows it too
+      if ((['en', 'yo', 'ha', 'ig'] as const).includes(msg.language as Lang)) language.value = msg.language as Lang
+      languageBeta.value = msg.beta
+      break
+    case 'balance':
+      lastBalance.value = { availableKobo: msg.availableKobo, availableDisplay: msg.availableDisplay ?? formatNaira(msg.availableKobo) }
       break
   }
 }

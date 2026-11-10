@@ -1,7 +1,9 @@
 import { LocationProvider, Router, Route, useLocation, lazy } from 'preact-iso'
 import { useEffect } from 'preact/hooks'
 import { env } from '../config/env'
-import { booted, onboardingComplete, updateAvailable, toast, devPanelOpen, locked } from '../session/session'
+import {
+  booted, onboardingComplete, updateAvailable, toast, devPanelOpen, locked, startVoice, stopVoice, navRequest, uiState,
+} from '../session/session'
 import { StatusAnnouncer } from '../components/StatusAnnouncer/StatusAnnouncer'
 import { Toast } from '../components/Toast/Toast'
 import { Boot } from '../screens/Boot/Boot'
@@ -36,10 +38,38 @@ function Guard({ children, needsOnboarding = true }: { children: preact.Componen
   return <>{children}</>
 }
 
+/**
+ * Avenza is voice-first: once onboarding is done the microphone and the voice session stay on
+ * on every screen, the app goes wherever the voice asks ("open settings", "show my transactions"),
+ * and a payment always brings the customer back to the main screen to see the read-back.
+ */
+function AlwaysListening() {
+  const { route, path } = useLocation()
+  const on = booted.value && onboardingComplete.value && path !== '/boot' && !path.startsWith('/onboarding')
+  useEffect(() => {
+    if (!on) return
+    void startVoice()
+    return () => stopVoice()
+  }, [on])
+  const target = navRequest.value
+  useEffect(() => {
+    if (!target) return
+    navRequest.value = null
+    if (on && path !== target) route(target)
+  }, [target])
+  const ui = uiState.value
+  useEffect(() => {
+    const atHome = ui === 'listening' || ui === 'hearing' || ui === 'checking'
+    if (on && !atHome && path !== '/' && path !== '/lock') route('/')
+  }, [ui, on])
+  return null
+}
+
 export function App() {
   return (
     <LocationProvider>
       <StatusAnnouncer />
+      <AlwaysListening />
       <Router>
         <Route path="/boot" component={Boot} />
         <Route path="/onboarding/language" component={() => <Guard needsOnboarding={false}><Language /></Guard>} />

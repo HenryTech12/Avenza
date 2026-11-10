@@ -215,5 +215,11 @@
   "onboard.fingerSay": "Place your finger on the sensor when your phone asks.",
   "onboard.askName": "What name should I call you? Say your name.",
   "onboard.nameHeard": "Thanks, {name}. Now place your finger on the sensor to register.",
-  "onboard.sayName": "Say your name, or type it."
+  "onboard.sayName": "Say your name, or type it.",
+  "home.example3": "What is my balance?",
+  "home.example4": "Speak Yoruba",
+  "lang.beta": "Beta",
+  "lang.betaLabel": "{name} is in beta: Avenza's words in this language have not been checked by a native speaker yet.",
+  "onboard.askLanguage": "Welcome to Avenza. Which language would you like to use? English, Hausa, Igbo or Yoruba?",
+  "onboard.sayLanguage": "Say the language you want, or tap it."
 }
