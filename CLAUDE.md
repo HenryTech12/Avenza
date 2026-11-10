@@ -98,6 +98,10 @@ override the ConfigMap) and uses the `regcred` pull secret automatically.
 
 ## Open issues (as of 10 Nov 2026, morning)
 
+0. **YarnGPT credits ran out** (10 Nov 09:50, after deploying `sha-dd2a0de`): 18 credits left,
+   402 `QUOTA_EXCEEDED`. Cost is about **1 credit per character**: a read-back is ~180–300,
+   the startup pre-warm ~2,900 (50 prompts) **on every pod start**. Until topped up, every prompt
+   falls back to the phone's own voice. Set `TTS_PREWARM=false` if credits are scarce.
 1. **YarnGPT TTS** (probe run 10 Nov): minimum text is **20 characters** (422
    `INPUT_TOO_SHORT`); shorter text is no longer sent and English prompts are all ≥20.
    First audio is 3.5–4.6 s for 175 characters, arriving almost all at once. Fixed

@@ -173,8 +173,12 @@ class TurnOrchestrator:
         gate = asyncio.Semaphore(max(1, self.settings.tts_prewarm_concurrency))
         started = time.perf_counter()
 
+        out_of_credit = asyncio.Event()
+
         async def one(key: tuple[str, str]) -> bool:
             async with gate:
+                if out_of_credit.is_set():
+                    return False
                 try:
                     result = await asyncio.wait_for(
                         self.tts.synthesize(key[1], language=key[0]),
@@ -184,6 +188,11 @@ class TurnOrchestrator:
                     logger.warning("tts prewarm failed for %r: %s", key[1][:40], type(exc).__name__)
                     return False
                 if result.is_empty:  # under the provider minimum, or no audio
+                    # Out of credits (402, 10 Nov 2026): stop, keep what is left for read-backs.
+                    if "QUOTA_EXCEEDED" in str(getattr(self.tts, "last_error", "") or ""):
+                        if not out_of_credit.is_set():
+                            logger.warning("tts prewarm: stopped, the TTS provider is out of credits")
+                        out_of_credit.set()
                     return False
                 self._tts_fixed[key] = (base64.b64encode(result.pcm).decode("ascii"), int(result.sample_rate))
                 return True
