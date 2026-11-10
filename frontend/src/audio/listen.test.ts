@@ -22,6 +22,8 @@ describe('spoken onboarding answers', () => {
     expect(nameFrom('my name is ngozi adaobi eze')).toBe('Ngozi Adaobi Eze')
     expect(nameFrom("I'm Tunde.")).toBe('Tunde')
     expect(nameFrom('Chukwuemeka')).toBe('Chukwuemeka')
+    expect(nameFrom('Henry Henry')).toBe('Henry')
+    expect(nameFrom('my name is henry henry okafor')).toBe('Henry Okafor')
   })
 })
 

@@ -130,6 +130,8 @@ export function nameFrom(text: string): string {
   const name = (m ? m[1] : s).trim()
   return name
     .split(/\s+/)
+    // speech recognition sometimes repeats a word ("Henry Henry", phone test 10 Nov)
+    .filter((w, i, all) => i === 0 || w.toLowerCase() !== all[i - 1].toLowerCase())
     .slice(0, 4)
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
     .join(' ')
