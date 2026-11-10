@@ -3,6 +3,25 @@
 All 481 tests pass (415 existing + 66 new in `tests/test_fixes.py`). 51 of the
 new tests fail on the previous code, which shows they catch the defects below.
 
+
+## 10 November 2026: YarnGPT TTS stall (open issue 1)
+
+- **The 422 reason was dropped.** YarnGPT puts it in `error.details` (and some
+  422s use `{"detail": [...]}`); the log line now keeps it, so the next
+  `tts failed:` warning says which field or limit was wrong.
+- **A stall now says where it stalled**: `ReadTimeout after N ms, B bytes
+  received (conversation route)`, so "200 then nothing" and "200 then cut off
+  mid-clip" can be told apart in `kubectl logs`.
+- **Ticket route, opt-in**: `YARNGPT_TTS_ROUTE=ticket` uses
+  `POST /api/v1/tts/prepare` then `GET /api/v1/tts/stream/{ticket}`. Written
+  from the route names only and **not verified live**; the default is still the
+  conversation route.
+- **`scripts/yarngpt_tts_probe.py`**: runs both routes with a short and a long
+  text from inside the pod and prints status, full error body, trace ids, time
+  to headers and first byte, bytes, and whether and where it stalled
+  (up to 4 paid calls).
+- 9 regression tests in `tests/ai/test_providers.py`.
+
 ## Act now
 
 - **Three live API keys were in `.env.example`** (Groq `LLM_API_KEY`, YarnGPT

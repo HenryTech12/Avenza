@@ -427,3 +427,92 @@ def test_yarngpt_tts_uses_the_catalogue_default_voice_when_none_is_set(monkeypat
     run(tts.synthesize("Again", None, "en"))
     assert [b["voice"] for b in calls["bodies"]] == ["adaora", "adaora"]
     assert calls["voices"] == 1  # looked up once
+
+
+# ---- YarnGPT TTS: 422 bodies, stall diagnostics, ticket route (open issue 1, 10 Nov) ----
+@pytest.mark.parametrize("body,expected", [
+    # YarnGPT's own envelope: the reason is in error.details, which used to be dropped.
+    ({"error": {"code": "INVALID_INPUT", "message": "Invalid request",
+                "details": {"errors": [{"loc": ["body", "voice"], "msg": "Field required"}]},
+                "trace_id": "368442d0"}}, ["422 INVALID_INPUT", "Field required", "trace=368442d0"]),
+    ({"detail": [{"loc": ["body", "text"], "msg": "String should have at least 20 characters"}]},
+     ["422", "at least 20 characters"]),
+])
+def test_yarngpt_tts_422_keeps_the_reason(body, expected):
+    tts = tts_with(lambda r: httpx.Response(422, json=body))
+    with pytest.raises(ProviderError):
+        run(tts.synthesize("Payment settled.", None, "en"))
+    for part in expected:
+        assert part in tts.last_error
+
+
+def test_yarngpt_tts_non_json_error_body_is_kept():
+    tts = tts_with(lambda r: httpx.Response(422, content=b"text too short"))
+    with pytest.raises(ProviderError):
+        run(tts.synthesize("Hi", None, "en"))
+    assert "text too short" in tts.last_error
+
+
+def test_yarngpt_tts_stall_says_how_many_bytes_arrived():
+    def handler(req):
+        raise httpx.ReadTimeout("no bytes", request=req)
+
+    tts = tts_with(handler)
+    with pytest.raises(ProviderError):
+        run(tts.synthesize("A long read-back sentence.", None, "en"))
+    assert "ReadTimeout" in tts.last_error and "0 bytes received" in tts.last_error
+    assert "conversation route" in tts.last_error
+
+
+def test_yarngpt_tts_ticket_route_prepares_then_streams():
+    seen = []
+
+    def handler(req):
+        seen.append((req.method, req.url.path))
+        if req.url.path == "/api/v1/tts/prepare":
+            assert json.loads(req.read()) == {"text": "Hello", "output_format": "pcm", "voice": "V"}
+            assert req.headers.get("Idempotency-Key")
+            return httpx.Response(200, json={"ticket": "tk_1", "expires_in": 60})
+        assert req.headers["Authorization"] == "Bearer k"
+        return httpx.Response(200, content=tone_pcm(0.1, 16000),
+                              headers={"Content-Type": "audio/l16; rate=16000; channels=1"})
+
+    res = run(tts_with(handler, route="ticket").synthesize("Hello", None, "en"))
+    assert seen == [("POST", "/api/v1/tts/prepare"), ("GET", "/api/v1/tts/stream/tk_1")]
+    assert res.sample_rate == 16000 and len(res.pcm) == 3200
+
+
+@pytest.mark.parametrize("prepared,path", [
+    ({"data": {"ticket_id": "tk_2"}}, "/api/v1/tts/stream/tk_2"),
+    ({"stream_url": "/api/v1/tts/stream/tk_3?sig=x"}, "/api/v1/tts/stream/tk_3"),
+])
+def test_yarngpt_tts_ticket_route_reads_other_shapes(prepared, path):
+    streamed = []
+
+    def handler(req):
+        if req.method == "POST":
+            return httpx.Response(201, json=prepared)
+        streamed.append(req.url.path)
+        return httpx.Response(200, content=tone_pcm(0.05, 24000), headers={"Content-Type": "audio/l16; rate=24000"})
+
+    run(tts_with(handler, route="ticket").synthesize("Hi", None, "en"))
+    assert streamed == [path]
+
+
+def test_yarngpt_tts_ticket_route_errors_are_reported():
+    tts = tts_with(lambda r: httpx.Response(200, json={"status": "ok"}), route="ticket")
+    with pytest.raises(ProviderError):
+        run(tts.synthesize("Hi", None, "en"))
+    assert "no ticket" in tts.last_error
+    tts = tts_with(lambda r: httpx.Response(404, json={"error": {"code": "NOT_FOUND", "message": "no route"}}),
+                   route="ticket")
+    with pytest.raises(ProviderError):
+        run(tts.synthesize("Hi", None, "en"))
+    assert "404 NOT_FOUND" in tts.last_error
+
+
+def test_yarngpt_tts_route_from_env(monkeypatch):
+    monkeypatch.setenv("YARNGPT_TTS_ROUTE", "ticket")
+    assert YarnGPTTTS(api_key="k").route == "ticket"
+    monkeypatch.setenv("YARNGPT_TTS_ROUTE", "bogus")
+    assert YarnGPTTTS(api_key="k").route == "conversation"
