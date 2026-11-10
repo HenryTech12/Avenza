@@ -195,6 +195,12 @@ class TurnOrchestrator:
                 if prompt.audio_url or key in out:
                     continue
                 out.append(key)
+            # the app's own lines (onboarding, fillers), served by GET /voice/{lang}/{id}
+            from .client_lines import CLIENT_LINES
+
+            for text in CLIENT_LINES.get(language, {}).values():
+                if (language, text) not in out:
+                    out.append((language, text))
         return out
 
     async def prewarm_tts(self) -> int:

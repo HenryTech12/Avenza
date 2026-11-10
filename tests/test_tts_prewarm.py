@@ -189,3 +189,17 @@ async def test_changing_the_voice_does_not_replay_the_old_one(services, tmp_path
     o.tts = CountingTTS()
     await o.prewarm_tts()
     assert len(o.tts.texts) == len(o.fixed_prompts(["en"]))  # new voice: generated again
+
+
+
+async def test_prewarm_prepares_the_app_lines_in_each_chosen_language(services, tmp_path):
+    """Phone test, 10 Nov: the first Yoruba onboarding paused before every line while it was generated."""
+    from avenza.client_lines import CLIENT_LINES
+
+    o = services["orchestrator"]
+    o.settings = dataclasses.replace(o.settings, tts_cache_dir=str(tmp_path), tts_prewarm_languages="en,yo")
+    o.tts = CountingTTS()
+    await o.prewarm_tts()
+    said = set(o.tts.texts)
+    assert set(CLIENT_LINES["yo"].values()) <= said and CLIENT_LINES["en"]["ob_greeting"] in said
+    assert o._disk_get("yo", CLIENT_LINES["yo"]["ob_consent"]) is not None  # what GET /voice/yo/... serves

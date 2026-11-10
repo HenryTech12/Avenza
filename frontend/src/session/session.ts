@@ -161,6 +161,15 @@ export async function appLine(id: string, fallback = ''): Promise<{ text: string
   return { text, play }
 }
 
+let lastFillerAt = 0
+let lastNoSpeechAt = 0
+/** "One moment, I am checking with your bank": only after a real wait, at most once per cooldown. */
+function playFiller(): void {
+  if (Date.now() - lastFillerAt < timeouts.fillerCooldownMs) return
+  lastFillerAt = Date.now()
+  void playPrompt('checking_bank')
+}
+
 /** Fillers the app speaks itself, fetched in the customer's language when it is not English. */
 const APP_LINE_PROMPTS = new Set(['checking_bank', 'no_speech_hint'])
 
@@ -253,6 +262,9 @@ function enterState(prev: MachineState, next: MachineState): void {
       setTimer('noSpeech', timeouts.noSpeechHintMs, () => {
         if (machine.value.ui !== 'listening') return
         hintGrown.value = true
+        // spoken at most once every few minutes: the mic is always on, silence is normal
+        if (Date.now() - lastNoSpeechAt < timeouts.noSpeechCooldownMs) return
+        lastNoSpeechAt = Date.now()
         announce(t('hint.noSpeech'))
         void playPrompt('no_speech_hint')
       })
@@ -261,7 +273,7 @@ function enterState(prev: MachineState, next: MachineState): void {
       break
     case 'checking':
       setTimer('filler', timeouts.fillerAfterMs, () => {
-        if (machine.value.ui === 'checking' && !heardFromServerSinceEnd) void playPrompt('checking_bank')
+        if (machine.value.ui === 'checking' && !heardFromServerSinceEnd) playFiller()
       })
       break
     case 'readback':
@@ -446,11 +458,7 @@ function onSpeechEnd(): void {
   dispatch({ type: 'VAD_END' })
   closeMic()
   waitForServer()
-  if (machine.value.ui === 'readback') {
-    setTimer('filler', timeouts.fillerAfterMs, () => {
-      if (!heardFromServerSinceEnd) void playPrompt('checking_bank')
-    })
-  }
+  // No filler after a read-back answer ("yes", "no"): the reply is the next step, not a bank check.
 }
 
 /** Every client wait has a timeout. When it fires: speak, tell the user money has not moved, never guess. */
