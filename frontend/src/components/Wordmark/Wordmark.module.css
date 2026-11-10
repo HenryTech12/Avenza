@@ -1,6 +1,9 @@
 .mark {
-  font-weight: 700;
-  letter-spacing: -0.03em;
+  font-family: var(--font-display);
+  font-weight: 400;
+  letter-spacing: 0.38em;
+  /* the trailing letter-spacing would push the word off-centre */
+  margin-right: -0.38em;
   color: var(--text);
   display: inline-flex;
   align-items: baseline;
@@ -12,14 +15,6 @@
   padding: 8px;
   min-height: 44px;
 }
-.sm { font-size: 1.15rem; }
-.md { font-size: 1.6rem; }
-.lg { font-size: 2.75rem; }
-.dot {
-  display: inline-block;
-  width: 0.2em;
-  height: 0.2em;
-  margin-left: 0.06em;
-  border-radius: 50%;
-  background: var(--accent);
-}
+.sm { font-size: 1rem; }
+.md { font-size: 1.5rem; }
+.lg { font-size: 2.4rem; }

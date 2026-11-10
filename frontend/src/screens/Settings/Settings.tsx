@@ -13,6 +13,7 @@ import {
 import { ApiError } from '../../api/http'
 import type { Theme } from '../../lib/settings'
 import { t } from '../../i18n'
+import { BottomNav } from '../../components/BottomNav/BottomNav'
 import styles from './Settings.module.css'
 
 const BUILD = (import.meta.env.VITE_BUILD_HASH as string | undefined) ?? 'dev'
@@ -247,6 +248,7 @@ export function Settings() {
           ))}
         </Sheet>
       ) : null}
+      <BottomNav active="settings" />
     </main>
   )
 }

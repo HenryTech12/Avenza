@@ -7,6 +7,7 @@ import { AmountDisplay } from '../../components/AmountDisplay/AmountDisplay'
 import { fetchHistory, fetchReceipt, errorText, type HistoryItem, type Receipt } from '../../session/account'
 import { formatNaira } from '../../lib/format'
 import { t } from '../../i18n'
+import { BottomNav } from '../../components/BottomNav/BottomNav'
 import styles from './History.module.css'
 
 const RANGES = [7, 30, 90] as const
@@ -75,7 +76,7 @@ export function History() {
   return (
     <main class="page">
       <header class={styles.head}>
-        <button type="button" class={styles.back} onClick={() => route('/settings')} aria-label={t('common.back')}>
+        <button type="button" class={styles.back} onClick={() => route('/')} aria-label={t('common.back')}>
           <Icon name="arrow-left" />
         </button>
         <h1 tabIndex={-1} ref={heading}>{t('history.title')}</h1>
@@ -134,12 +135,13 @@ export function History() {
               return (
                 <li key={r.id ?? `${r.reference}-${n}`}>
                   <button type="button" class={styles.item} onClick={() => setOpen(r)}>
+                    <span class={styles.avatar} aria-hidden="true">{(r.recipient || '?').trim().charAt(0).toUpperCase()}</span>
                     <span class={styles.main}>
                       <span class={styles.name}>{r.recipient || '—'}</span>
                       <span class={styles.date}>{when(r.createdAt)}</span>
                     </span>
                     <span class={styles.side}>
-                      <span class={`${styles.amt} tabular`}>{formatNaira(r.amountKobo)}</span>
+                      <span class={`${styles.amt} tabular`}>− {formatNaira(r.amountKobo)}</span>
                       <span class={`${styles.chip} ${styles[tone]}`}>
                         <Icon name={chip[tone]} size={14} />
                         {t(label)}
@@ -154,6 +156,7 @@ export function History() {
         </>
       )}
       {open ? <ReceiptSheet item={open} onClose={() => setOpen(null)} /> : null}
+      <BottomNav active="transactions" />
     </main>
   )
 }

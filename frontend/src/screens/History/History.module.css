@@ -30,13 +30,25 @@
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-2);
-  background: var(--surface);
+  background: var(--surface-raised);
   color: var(--text);
   border: var(--border-width) solid var(--border);
   border-radius: var(--radius-card);
   text-align: left;
 }
+.avatar {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--bg);
+  border: var(--border-width) solid var(--border);
+  font-weight: 700;
+}
 .main, .side { display: flex; flex-direction: column; gap: 4px; }
+.main { flex: 1; min-width: 0; }
 .side { align-items: flex-end; }
 .name { font-weight: 700; }
 .date { color: var(--text-muted); font-size: var(--fs-label); }

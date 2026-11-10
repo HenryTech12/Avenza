@@ -37,3 +37,11 @@
   color: var(--danger);
   font-weight: 700;
 }
+.voiceHint {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: var(--fs-label);
+}

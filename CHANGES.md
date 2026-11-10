@@ -4,6 +4,28 @@ All 481 tests pass (415 existing + 66 new in `tests/test_fixes.py`). 51 of the
 new tests fail on the previous code, which shows they catch the defects below.
 
 
+## 10 November 2026: frontend redesign (prototype)
+
+- **Look**: warm "pearl" theme is the default (dark and high contrast stay in
+  Settings), spaced AVENZA wordmark, pearl orb with mic-level bars.
+- **Home** (no transfer in progress): greeting by name, "Listening · Always
+  on", the last few lines of the conversation as chat bubbles, balance card
+  (hidden until tapped, from `GET /me/balance`), quick actions (send money
+  hint, check balance, history, lock), "You can also say" examples, bottom
+  navigation (Home, Transactions, Settings).
+- **Transfer screens**: read-back unchanged; fingerprint step as a "Verify your
+  identity" card; success screen with a check mark, reference and date.
+- **Voice onboarding**: the consent is read aloud and "I agree" can be said;
+  the fingerprint step asks for the name by voice and then opens the
+  fingerprint prompt. Buttons and typing still work. Uses the browser's speech
+  recognition (no server session exists before enrolment), so the consent now
+  names it. Consent text also corrected to the real providers (it named
+  Google Cloud and Anthropic); consent version `2026-11-v2`.
+- The current state stays the page's `<h1>`, so screen readers and the e2e
+  tests see "Listening", "Approve with your fingerprint", "Transfer successful".
+- Not built (no backend support): bills and services, airtime, several
+  accounts, a typed send-money form.
+
 ## 10 November 2026: Sahara transcripts doubled
 
 Latency probe on the cluster: Sahara sends a mid-utterance

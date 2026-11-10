@@ -16,6 +16,7 @@ body,
 body {
   margin: 0;
   background: var(--bg);
+  min-height: 100dvh;
   color: var(--text);
   font-family: var(--font);
   font-size: var(--fs-body);
@@ -75,4 +76,11 @@ a {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+:root[data-theme='light'],
+:root[data-theme='light'] body {
+  background: var(--page-wash);
+  background-attachment: fixed;
+  background-color: var(--bg);
 }

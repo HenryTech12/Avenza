@@ -1,0 +1,28 @@
+.nav {
+  position: sticky;
+  bottom: 0;
+  /* sit flush with the screen edges: undo the page padding on the sides and bottom */
+  margin: auto calc(-1 * var(--space-3)) calc(-1 * (var(--space-3) + env(safe-area-inset-bottom)));
+  padding: var(--space-1) var(--space-2) calc(var(--space-1) + env(safe-area-inset-bottom));
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  backdrop-filter: blur(12px);
+  border-top: var(--border-width) solid var(--border);
+  z-index: 5;
+}
+.tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: var(--tap);
+  color: var(--text-muted);
+  text-decoration: none;
+  font-size: var(--fs-label);
+}
+.active {
+  color: var(--text);
+  font-weight: 700;
+}

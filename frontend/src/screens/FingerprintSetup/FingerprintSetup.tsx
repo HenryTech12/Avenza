@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'preact/hooks'
 import { useLocation } from 'preact-iso'
 import { BigButton } from '../../components/BigButton/BigButton'
 import { Icon } from '../../components/Icon/Icon'
-import { registerFingerprint, enrolError, deviceToken, type EnrolOutcome } from '../../session/session'
+import { registerFingerprint, enrolError, deviceToken, audioRunning, speakLine, answerLocale, type EnrolOutcome } from '../../session/session'
+import { listenFor, nameFrom, voiceAnswersSupported } from '../../audio/listen'
 import { t } from '../../i18n'
 import styles from './FingerprintSetup.module.css'
 
@@ -22,12 +23,43 @@ export function FingerprintSetup() {
   const [name, setName] = useState('')
   const [problem, setProblem] = useState<Exclude<EnrolOutcome, 'ok'> | null>(null)
 
+  const [listening, setListening] = useState(false)
   useEffect(() => heading.current?.focus({ preventScroll: true }), [])
 
-  const register = async () => {
+  // Voice onboarding: ask for the name, fill it in from the answer, then open the fingerprint prompt.
+  // Typing and the button still work; a browser that refuses to open the prompt without a tap just waits for it.
+  useEffect(() => {
+    if (deviceToken.value) {
+      void speakLine(t('onboard.fingerSay'))
+      return
+    }
+    if (!voiceAnswersSupported() || !audioRunning.value) return
+    let stop = () => undefined as void
+    let alive = true
+    void (async () => {
+      await speakLine(t('onboard.askName'))
+      if (!alive) return
+      setListening(true)
+      stop = listenFor(answerLocale(), (text) => {
+        const heardName = nameFrom(text)
+        if (heardName.length < 2) return false
+        setName(heardName)
+        setListening(false)
+        void speakLine(t('onboard.nameHeard', { name: heardName })).then(() => { if (alive) void register(heardName, true) })
+        return true
+      })
+    })()
+    return () => {
+      alive = false
+      stop()
+      setListening(false)
+    }
+  }, [])
+
+  const register = async (who = name, automatic = false) => {
     setBusy(true)
     setProblem(null)
-    const r = await registerFingerprint(name)
+    const r = await registerFingerprint(who)
     setBusy(false)
     if (r === 'ok') {
       setDone(true)
@@ -35,7 +67,8 @@ export function FingerprintSetup() {
     } else if (r === 'already-registered') {
       setDone(true)
       setTimeout(() => route('/', true), 600)
-    } else {
+    } else if (!(automatic && r === 'cancelled')) {
+      // an automatic prompt the browser refused (no tap yet) is not an error: the button is right there
       setProblem(r)
     }
   }
@@ -65,7 +98,7 @@ export function FingerprintSetup() {
               value={name}
               onInput={(e) => setName((e.currentTarget as HTMLInputElement).value)}
             />
-            <span id="display-name-hint" class="muted">{t('finger.nameHint')}</span>
+            <span id="display-name-hint" class="muted">{listening ? t('onboard.sayName') : t('finger.nameHint')}</span>
           </form>
         ) : null}
         {problem ? (
@@ -76,7 +109,7 @@ export function FingerprintSetup() {
       </div>
       {!done ? (
         <div class="page-bottom">
-          <BigButton onClick={register} loading={busy}>
+          <BigButton onClick={() => void register()} loading={busy}>
             {problem === 'cancelled' || problem === 'error' ? t('common.retry') : t('finger.register')}
           </BigButton>
         </div>

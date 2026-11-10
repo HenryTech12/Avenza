@@ -24,7 +24,7 @@ const defaults: Persisted = {
   consentId: null,
   deviceToken: null,
   onboardingComplete: false,
-  theme: 'system',
+  theme: 'light', // the warm "pearl" look from the prototype is the default
   highContrast: false,
 }
 
@@ -36,7 +36,7 @@ function load(): Persisted {
       consentId: typeof raw.consentId === 'string' ? raw.consentId : null,
       deviceToken: typeof raw.deviceToken === 'string' ? raw.deviceToken : null,
       onboardingComplete: raw.onboardingComplete === true,
-      theme: raw.theme === 'dark' || raw.theme === 'light' ? raw.theme : 'system',
+      theme: raw.theme === 'dark' || raw.theme === 'light' || raw.theme === 'system' ? raw.theme : defaults.theme,
       highContrast: raw.highContrast === true,
     }
   } catch {
