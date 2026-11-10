@@ -110,7 +110,8 @@ const plain = (text: string) => text.toLowerCase().normalize('NFD').replace(/[\u
 export function isAgreement(text: string): boolean {
   const s = plain(text)
   if (/\b(not|don't|do not|no|rara|a'a|aa|mba|ban yarda)\b/.test(s)) return false
-  return /\b(i agree|agree|agreed|yes|okay|ok|accept|mo gba|beeni|mo fara mo|na yarda|ekwere m|ekwenyere m|ee)\b/.test(s)
+  // en-NG recognisers write the local answers in many ways: "mo gba", "mogba", "na yarda", "nayarda", "a kwere m"
+  return /\b(i agree|agree|agreed|yes|okay|ok|accept|mo gba|mogba|mo gbaa|beeni|mo fara mo|na yarda|nayarda|na amince|ekwere m|ekwerem|a kwere m|akwerem|ekwenyere m|ekwenyerem|ee)\b/.test(s)
 }
 
 /** "English", "Yoruba please", "Hausa", "Igbo", "Turanci" -> the language code, else null. */

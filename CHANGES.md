@@ -4,6 +4,25 @@ All 481 tests pass (415 existing + 66 new in `tests/test_fixes.py`). 51 of the
 new tests fail on the previous code, which shows they catch the defects below.
 
 
+## 10 November 2026 (late): the chosen language from the first word; phone fixes
+
+Phone test: Yoruba chosen, but onboarding, "checking with your bank" and "I'm
+still here" stayed English; "I agree" was not heard; the fingerprint prompt did
+not open by itself.
+
+- `GET /voice/{lang}/{line_id}` (`avenza/client_lines.py`): the app's own fixed
+  lines (onboarding, fillers) in English, Yoruba, Hausa and Igbo, voiced by the
+  server's TTS and cached on disk. Fixed ids only, never free text. The app plays
+  them instead of the phone's voice (phones rarely have a Yoruba voice, and a
+  missing voice also delayed listening). Hausa/Igbo/Yoruba text is unverified.
+- Onboarding confirms the language in that language, then speaks every step in it.
+- "I agree" is listened for in Nigerian English and accepted in all four
+  languages (also "mogba", "nayarda", "a kwere m").
+- Fingerprint: Chrome on Android opens the prompt only right after a touch, so
+  Avenza now says "Touch the screen anywhere, then place your finger on the
+  sensor" and the whole screen is the target (where the browser allows it, the
+  prompt still opens by itself).
+
 ## 10 November 2026 (night): fixed prompts cached on disk
 
 - The audio of every fixed prompt is saved under `TTS_CACHE_DIR` (default

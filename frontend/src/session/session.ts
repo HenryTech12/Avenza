@@ -30,6 +30,7 @@ import {
 } from '../lib/settings'
 import type { Lang, ServerMessage } from '../protocol/messages'
 import { errorText } from './account'
+import { decodePcm } from '../protocol/wire'
 import { initialState, reduce, type MachineEvent, type MachineState } from './machine'
 
 export { language, theme, highContrast, onboardingComplete, consentId, deviceToken, lastTurn, protocolLog, audioRunning }
@@ -123,7 +124,53 @@ function announce(text: string) {
   announcement.value = text
 }
 
+/**
+ * One of the app's own fixed lines in the customer's language, voiced by the server (YarnGPT speaks
+ * Yoruba, Hausa and Igbo; phones usually don't). Falls back to `fallback` and the phone's voice.
+ * Phone test, 10 Nov: Yoruba chosen, but onboarding and "checking with your bank" stayed English.
+ */
+export async function appLine(id: string, fallback = ''): Promise<{ text: string; play: () => Promise<void> }> {
+  const lang = language.value
+  let text = fallback
+  let pcm: Int16Array | null = null
+  let rate = 24000
+  try {
+    const res = await fetch(`${env.API_BASE_URL ?? ''}/voice/${lang}/${id}`)
+    if (res.ok && (res.headers.get('content-type') ?? '').includes('json')) {
+      const body = (await res.json()) as { text?: string; audio?: { data?: string; sample_rate?: number } | null }
+      if (body.text) text = body.text
+      if (body.audio?.data) {
+        pcm = decodePcm(body.audio.data)
+        rate = body.audio.sample_rate ?? rate
+      }
+    }
+  } catch {
+    /* offline or mock mode: the fallback text in the phone's voice */
+  }
+  const play = async () => {
+    if (!audioRunning.value) return
+    if (pcm && pcm.length) {
+      const ctx = getAudioContext()
+      const buf = ctx.createBuffer(1, pcm.length, rate)
+      const ch = buf.getChannelData(0)
+      for (let i = 0; i < pcm.length; i++) ch[i] = pcm[i] / 32768
+      return player.playBuffer(buf, id)
+    }
+    if (text) return player.speak(text, localeFor(lang), id)
+  }
+  return { text, play }
+}
+
+/** Fillers the app speaks itself, fetched in the customer's language when it is not English. */
+const APP_LINE_PROMPTS = new Set(['checking_bank', 'no_speech_hint'])
+
 function playPrompt(id: string): Promise<void> {
+  if (language.value !== 'en' && APP_LINE_PROMPTS.has(id)) {
+    return appLine(id, prompts.textOf(id, 'en') ?? '').then((line) => {
+      addChat('avenza', line.text)
+      return line.play()
+    })
+  }
   const said = prompts.textOf(id, language.value)
   if (said) addChat('avenza', said)
   if (!audioRunning.value) return Promise.resolve()

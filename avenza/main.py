@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import hashlib
 import hmac
 import ipaddress
@@ -31,6 +32,7 @@ from .models import AuditLog, Device, Transfer, User
 from .money import format_naira
 from .orchestrator import TurnOrchestrator
 from .prompts import PROMPTS, PromptLibrary
+from .client_lines import client_line
 from .providers import build_stt, build_tts
 from .security import ApprovalError, WebAuthnService
 from .services import DeviceService, SessionError, SessionService, TransferLocked, TransferNotFound, TransferService
@@ -119,7 +121,7 @@ _LOCAL_HOSTS = {"localhost", "testclient"}
 # these is a 404 (JSON), never the frontend's index.html.
 API_PREFIXES = {
     "api", "ws", "hooks", "dev", "audit", "me", "transfers", "devices", "consents",
-    "locks", "health", "healthz", "config", "prompts", "static", "docs", "redoc", "openapi.json",
+    "locks", "health", "healthz", "config", "prompts", "static", "docs", "redoc", "openapi.json", "voice",
 }
 
 
@@ -381,6 +383,39 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except Exception:
             return JSONResponse({"ok": False}, status_code=503)
         return {"ok": True}
+
+    voice_locks: dict[tuple[str, str], asyncio.Lock] = {}
+
+    @app.get("/voice/{language}/{line_id}")
+    async def voice_line(language: str, line_id: str):
+        """One of the app's own fixed lines (onboarding, fillers) in the customer's language, voiced
+        by the server's TTS. Phones rarely have a Yoruba/Hausa/Igbo voice, and onboarding has no
+        voice session yet. Fixed ids only (no free text), audio cached on disk after the first call."""
+        found = client_line(language, line_id)
+        if found is None:
+            raise HTTPException(status_code=404, detail="unknown line")
+        lang, text = found
+        body = {"id": line_id, "language": lang, "text": text, "audio": None}
+        if getattr(tts, "simulated", True):
+            return body
+        saved = orchestrator._disk_get(lang, text)
+        if saved is None:
+            lock = voice_locks.setdefault((lang, line_id), asyncio.Lock())
+            async with lock:
+                saved = orchestrator._disk_get(lang, text)
+                if saved is None:
+                    make = getattr(tts, "synthesize_for_cache", tts.synthesize)
+                    try:
+                        result = await asyncio.wait_for(make(text, language=lang), max(settings.tts_timeout_s, 20.0))
+                    except Exception as exc:  # noqa: BLE001 - the phone's voice speaks the text instead
+                        logger.info("voice line %s/%s: no audio (%s)", lang, line_id, type(exc).__name__)
+                        return body
+                    if not result.is_empty:
+                        orchestrator._disk_put(lang, text, result.pcm, int(result.sample_rate))
+                        saved = (base64.b64encode(result.pcm).decode("ascii"), int(result.sample_rate))
+        if saved is not None:
+            body["audio"] = {"encoding": "pcm_s16le", "sample_rate": saved[1], "data": saved[0]}
+        return body
 
     @app.get("/health")
     def health():

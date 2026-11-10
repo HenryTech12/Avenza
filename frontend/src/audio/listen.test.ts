@@ -7,7 +7,7 @@ describe('spoken onboarding answers', () => {
     for (const s of ['I do not agree', "I don't agree", 'no', 'not now', 'hello', 'I need to think', 'eh?']) expect(isAgreement(s), s).toBe(false)
   })
   it('accepts agreement in Yoruba, Hausa and Igbo (beta)', () => {
-    for (const s of ['Mo gbà', 'Na yarda', 'Ekwere m', 'Bẹ́ẹ̀ni']) expect(isAgreement(s), s).toBe(true)
+    for (const s of ['Mo gbà', 'Na yarda', 'Ekwere m', 'Bẹ́ẹ̀ni', 'mogba', 'nayarda', 'a kwere m', 'I agree.']) expect(isAgreement(s), s).toBe(true)
     for (const s of ['Rárá', "A'a", 'Mba', 'Ban yarda ba']) expect(isAgreement(s), s).toBe(false)
   })
   it('hears the language the customer names', () => {

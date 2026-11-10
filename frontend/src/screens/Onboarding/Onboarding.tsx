@@ -3,7 +3,7 @@ import { useLocation } from 'preact-iso'
 import { Icon } from '../../components/Icon/Icon'
 import { Wordmark } from '../../components/Wordmark/Wordmark'
 import {
-  audioRunning, speakLine, answerLocale, chooseLanguage, giveConsent, registerFingerprint, enrolError, languages,
+  audioRunning, speakLine, appLine, chooseLanguage, giveConsent, registerFingerprint, enrolError, languages,
   type EnrolOutcome,
 } from '../../session/session'
 import { ask, isAgreement, languageFrom, nameFrom, voiceAnswersSupported } from '../../audio/listen'
@@ -52,6 +52,16 @@ export function Onboarding() {
     await speakLine(text)
     setSpeaking(false)
   }
+  // A fixed line in the chosen language, voiced by the server (the phone rarely speaks Yoruba/Hausa/Igbo).
+  const sayLine = async (id: string, fallbackKey: string) => {
+    const line = await appLine(id, t(fallbackKey))
+    push('avenza', line.text)
+    setSpeaking(true)
+    await line.play()
+    setSpeaking(false)
+    return line.text
+  }
+  const [touchText, setTouchText] = useState('')
 
   useEffect(() => chatEnd.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }), [lines.length])
 
@@ -69,6 +79,7 @@ export function Onboarding() {
     if (step !== 'language') return
     push('you', said ?? languages.find((l) => l.code === code)?.name ?? code)
     await chooseLanguage(code)
+    await sayLine('ob_language_set', 'ob.languageSet') // first line in the new language
     setStep('consent')
   }
   const answerConsent = async (said?: string) => {
@@ -78,7 +89,7 @@ export function Onboarding() {
     const r = await giveConsent()
     setBusy(false)
     if (r === 'ok') setStep('finger')
-    else void say(r === 'mic-denied' ? t('ob.micDenied') : t('ob.saveFailed'))
+    else void (r === 'mic-denied' ? sayLine('ob_mic_denied', 'ob.micDenied') : sayLine('ob_save_failed', 'ob.saveFailed'))
   }
   const register = async () => {
     setBusy(true)
@@ -89,7 +100,12 @@ export function Onboarding() {
       setStep('done')
       return
     }
-    if (r === 'cancelled') setNeedTouch(true) // the browser wants a touch first, or it was dismissed
+    if (r === 'cancelled') {
+      // the browser wants a touch first, or the prompt was dismissed: the whole screen is the target
+      setNeedTouch(true)
+      setTouchText(await sayLine('ob_finger_again', 'onboard.tapToFinger'))
+      return
+    }
     void say(r === 'error' && enrolError.value ? enrolError.value : t(problems[r]))
   }
 
@@ -107,8 +123,8 @@ export function Onboarding() {
         listen({
           lang: 'en-NG',
           say: async (n) => {
-            if (n === 0) await say(t('ob.greeting'))
-            await say(n === 0 ? t('ob.askName') : t('ob.askNameAgain'))
+            if (n === 0) await sayLine('ob_greeting', 'ob.greeting')
+            await (n === 0 ? sayLine('ob_ask_name', 'ob.askName') : sayLine('ob_ask_name_again', 'ob.askNameAgain'))
           },
           onText: answerName,
         })
@@ -127,8 +143,10 @@ export function Onboarding() {
         break
       case 'consent':
         listen({
-          lang: answerLocale(),
-          say: (n) => say(n === 0 ? t('ob.consent') : t('ob.consentAgain')),
+          // Nigerian English recognition hears "I agree" and the Yoruba/Hausa/Igbo answers best;
+          // a Yoruba recogniser (where one exists) missed an English "I agree" (phone test, 10 Nov).
+          lang: 'en-NG',
+          say: (n) => (n === 0 ? sayLine('ob_consent', 'ob.consent') : sayLine('ob_consent_again', 'ob.consentAgain')).then(() => undefined),
           onText: (text) => {
             if (!isAgreement(text)) return false
             void answerConsent(text)
@@ -137,12 +155,20 @@ export function Onboarding() {
         })
         break
       case 'finger':
-        void say(t('ob.finger')).then(() => {
-          if (alive) void register()
+        // Chrome on Android opens the fingerprint prompt only right after a touch (a browser security
+        // rule). So Avenza says "touch the screen anywhere" and the whole screen becomes the target;
+        // where the browser allows it without a touch, the prompt opens straight away.
+        void sayLine('ob_finger', 'ob.finger').then((text) => {
+          if (!alive) return
+          const activation = (navigator as Navigator & { userActivation?: { isActive: boolean } }).userActivation
+          if (activation && !activation.isActive && !navigator.webdriver) {
+            setTouchText(text)
+            setNeedTouch(true)
+          } else void register()
         })
         break
       case 'done':
-        void say(t('ob.done', { name: nameRef.current })).then(() => {
+        void sayLine('ob_done', 'ob.done').then(() => {
           if (alive) route('/', true)
         })
         break
@@ -225,7 +251,7 @@ export function Onboarding() {
 
       {needTouch && step === 'finger' ? (
         <button type="button" class={styles.touchAnywhere} onClick={() => void register()} aria-label={t('onboard.tapToFingerLabel')}>
-          <span><Icon name="fingerprint" size={28} /> {t('onboard.tapToFinger')}</span>
+          <span><Icon name="fingerprint" size={28} /> {touchText || t('onboard.tapToFinger')}</span>
         </button>
       ) : null}
     </main>
