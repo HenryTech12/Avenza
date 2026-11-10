@@ -1,0 +1,47 @@
+.boot {
+  justify-content: center;
+}
+.bar {
+  width: 160px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border);
+  overflow: hidden;
+}
+.fill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  border-radius: 2px;
+  transition: width 200ms var(--ease);
+}
+.tap {
+  width: 100%;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  background: var(--bg);
+  border: 0;
+  color: var(--text);
+  padding: var(--space-3);
+  animation: appear 250ms var(--ease);
+}
+.tapText {
+  margin-top: var(--space-4);
+  font-size: var(--fs-status);
+  font-weight: 700;
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: var(--on-accent);
+}
+.tapHint {
+  color: var(--text-muted);
+}
+@keyframes appear {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}

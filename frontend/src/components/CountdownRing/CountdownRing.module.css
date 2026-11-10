@@ -1,0 +1,19 @@
+.wrap {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+.accent { --ring: var(--accent); }
+.warning { --ring: var(--warning); }
+.track {
+  stroke: var(--border);
+}
+.bar {
+  stroke: var(--ring);
+  transition: stroke-dashoffset 200ms linear;
+}
+.secs {
+  position: absolute;
+  font-size: var(--fs-sub);
+  font-weight: 700;
+}

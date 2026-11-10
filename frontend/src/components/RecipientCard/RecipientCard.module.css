@@ -1,0 +1,41 @@
+.card {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  background: var(--surface);
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius-card);
+}
+.verified {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  color: var(--accent);
+  font-size: var(--fs-label);
+  font-weight: 700;
+}
+.chip {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 10px;
+  border-radius: var(--radius-pill);
+  color: var(--warning);
+  background: var(--warning-soft);
+  border: var(--border-width) solid var(--warning);
+}
+.name {
+  font-size: var(--fs-sub);
+  font-weight: 700;
+  line-height: var(--lh-large);
+}
+.bank {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+}

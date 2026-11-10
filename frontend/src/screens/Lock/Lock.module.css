@@ -1,0 +1,14 @@
+.lock {
+  background: color-mix(in srgb, var(--danger) 10%, var(--bg));
+  max-width: none;
+}
+.ring {
+  display: grid;
+  place-items: center;
+  width: 144px;
+  height: 144px;
+  border-radius: 50%;
+  color: var(--danger);
+  border: 3px solid var(--danger);
+  background: var(--danger-soft);
+}

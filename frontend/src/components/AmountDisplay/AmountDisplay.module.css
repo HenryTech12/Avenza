@@ -1,0 +1,24 @@
+.wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  text-align: center;
+}
+.amount {
+  font-size: var(--fs-amount);
+  font-weight: 700;
+  line-height: var(--lh-large);
+  letter-spacing: -0.02em;
+}
+.words {
+  color: var(--text-muted);
+  font-size: var(--fs-body);
+  text-transform: capitalize;
+}
+.compact .amount {
+  font-size: var(--fs-sub);
+}
+.compact .words {
+  display: none;
+}

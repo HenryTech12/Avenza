@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "voice": "placeholder",
+  "prompts": [
+    { "id": "welcome", "lang": "en", "text": "Welcome to Avenza." },
+    { "id": "listening", "lang": "en", "text": "I'm listening." },
+    { "id": "checking_bank", "lang": "en", "text": "One moment, checking with your bank." },
+    { "id": "say_yes_no_repeat", "lang": "en", "text": "Say yes, no, or repeat." },
+    { "id": "place_finger_enrol", "lang": "en", "text": "Place your finger on the sensor to register." },
+    { "id": "place_finger_approve", "lang": "en", "text": "Place your finger on the sensor to approve this transfer." },
+    { "id": "fingerprint_retry", "lang": "en", "text": "I couldn't read your fingerprint. Try once more." },
+    { "id": "sending", "lang": "en", "text": "Sending to your bank." },
+    { "id": "settled", "lang": "en", "text": "Done. Your transfer was successful." },
+    { "id": "failed", "lang": "en", "text": "The transfer failed. Your money has not moved." },
+    { "id": "pending_unknown", "lang": "en", "text": "I'm checking the final status with your bank." },
+    { "id": "cancelled", "lang": "en", "text": "Cancelled. No money moved." },
+    { "id": "expired", "lang": "en", "text": "Time ran out. No money moved." },
+    { "id": "no_speech_hint", "lang": "en", "text": "I'm still here. Tell me who to send money to." },
+    { "id": "err_offline", "lang": "en", "text": "You're offline. I'll keep trying. Your money has not moved." },
+    { "id": "err_connection_lost", "lang": "en", "text": "I lost the connection. Your money has not moved." },
+    { "id": "err_mic_denied", "lang": "en", "text": "I need the microphone to hear you." },
+    { "id": "err_provider_down", "lang": "en", "text": "I can't understand speech right now. Your money has not moved." },
+    { "id": "err_generic", "lang": "en", "text": "Something went wrong. Your money has not moved." },
+    { "id": "scam_pause", "lang": "en", "text": "This is a new recipient and a large amount. Take a moment. Say cancel if this is not right." },
+    { "id": "duplicate_warning", "lang": "en", "text": "You sent this same amount to this person a moment ago. Send again?" },
+    { "id": "locked", "lang": "en", "text": "Transfers are locked. Unlock with your fingerprint." },
+    {
+      "id": "consent_read",
+      "lang": "en",
+      "text": "Before we start. Avenza listens to your voice while the app is open, so it can understand your request. Your voice is processed by speech and language providers working for Avenza. We keep only what is needed for the audit record of your transfers. Your voice never approves a payment: only your fingerprint does. You can withdraw your consent at any time in Settings. Tap I agree to continue."
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+.mark {
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: var(--text);
+  display: inline-flex;
+  align-items: baseline;
+  line-height: 1;
+}
+.btn {
+  background: none;
+  border: 0;
+  padding: 8px;
+  min-height: 44px;
+}
+.sm { font-size: 1.15rem; }
+.md { font-size: 1.6rem; }
+.lg { font-size: 2.75rem; }
+.dot {
+  display: inline-block;
+  width: 0.2em;
+  height: 0.2em;
+  margin-left: 0.06em;
+  border-radius: 50%;
+  background: var(--accent);
+}
