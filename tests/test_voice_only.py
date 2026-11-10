@@ -158,3 +158,22 @@ def test_every_reply_exists_in_every_language_with_the_same_placeholders():
         for key, text in PROMPTS["en"].items():
             assert key in PROMPTS[lang], (lang, key)
             assert fields(PROMPTS[lang][key]) == fields(text), (lang, key)
+
+
+def test_history_phrases_people_actually_say():
+    """10 Nov: "last transaction" was not understood; "2 days ago" and "in October" fell back to 30 days."""
+    from datetime import datetime
+
+    from avenza.parser import parse_history_query
+
+    now = datetime(2026, 11, 10, 21, 0)  # naive UTC, 22:00 in Lagos
+    q = parse_history_query("what was my last transaction", now)
+    assert keyword_intent("what was my last transaction").intent == Intent.HISTORY
+    assert q.limit == 1 and (now - q.start).days == 365
+    assert parse_history_query("show my last five transactions", now).limit == 5
+    two = parse_history_query("transactions 2 days ago", now)
+    three = parse_history_query("what did I send three days ago", now)
+    assert two.label == "2 days ago" and (two.end - two.start).days == 1
+    assert three.label == "3 days ago" and three.start < two.start
+    october = parse_history_query("history for october", now)
+    assert october.label == "October" and october.start.month in (9, 10) and october.end <= now

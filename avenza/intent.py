@@ -116,6 +116,11 @@ _LOCK = {
     "freeze transfers",
 }
 _HISTORY = {
+    "last transaction",
+    "last payment",
+    "last transfer",
+    "latest transaction",
+    "most recent transaction",
     "history",
     "transactions",
     "transaction history",

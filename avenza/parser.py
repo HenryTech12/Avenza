@@ -874,6 +874,32 @@ def _parse_history_local(text: str, now: datetime) -> HistoryQuery:
 
     start_of_today = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
+    # "my last transaction", "last payment": the single latest one, from the past year (10 Nov)
+    if re.search(r"\b(?:last|latest|most recent)\s+(?:transaction|payment|transfer)\b", norm) and not re.search(
+        r"\b(?:last|past)\s+[a-z0-9]+\s+(?:transactions|payments|transfers)\b", norm
+    ):
+        return HistoryQuery(now - timedelta(days=365), now, "your last transaction", 1)
+
+    # "three days ago": that whole day
+    m = re.search(r"\b([a-z0-9]+)\s+days?\s+ago\b", norm)
+    if m:
+        word = m.group(1)
+        n = int(word) if word.isdigit() else (_small_number_from_words(word) or (1 if word in {"a", "one"} else None))
+        if n:
+            n = max(1, min(365, n))
+            start = start_of_today - timedelta(days=n)
+            return HistoryQuery(start, start + timedelta(days=1), f"{n} days ago", limit)
+
+    # "in October", "for october": that month (this year, or last year if it has not come yet)
+    months = ["january", "february", "march", "april", "may", "june", "july", "august",
+              "september", "october", "november", "december"]
+    for idx, month in enumerate(months, start=1):
+        if re.search(rf"\b(?:in|for|during|of)\s+{month}\b", norm):
+            year = now.year if idx <= now.month else now.year - 1
+            start = datetime(year, idx, 1)
+            end = datetime(year + (idx == 12), (idx % 12) + 1, 1)
+            return HistoryQuery(start, min(end, now), month.title(), limit)
+
     if "today" in norm:
         return HistoryQuery(start_of_today, now, "today", limit)
     if "yesterday" in norm:
