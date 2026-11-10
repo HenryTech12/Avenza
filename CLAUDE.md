@@ -21,6 +21,7 @@ Avenza reads back the bank-verified name, the customer says yes, and only a
 | `frontend/` | The frontend team's app (Preact + TypeScript + Vite), from PR #1 `add-frontend`. Built inside the Docker image and served by the backend at `/` (same origin as the API). Env: `VITE_BACKEND_MODE`, `VITE_API_BASE_URL` (empty = same origin), `VITE_WS_URL` |
 | `web/` | Legacy PWA, served only when `frontend/dist` does not exist |
 | `deploy/forge/` | `app.yaml` (ConfigMap, Deployment, Service), `deploy.sh`, `env.forge.example` |
+| `deploy/modal/` | `yarngpt_modal.py`: the self-hosted YarnGPT2 voice on Modal (`modal deploy deploy/modal/yarngpt_modal.py`) |
 | `scripts/` | `sandbox_smoke.py`, `register_webhook.py`, `latency_probe.py`, `latency_report.py`, `yarngpt_tts_probe.py` |
 | `docs/` | `FORGE.md` (platform runbook), `PROTOCOL.md` (WebSocket contract), `SECURITY.md` |
 | `CHANGES.md` | Everything changed since the 9 Nov review |
