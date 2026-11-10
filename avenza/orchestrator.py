@@ -158,9 +158,18 @@ class TurnOrchestrator:
         Every call spends YarnGPT credits: about one per English prompt per start.
         """
         if getattr(self.tts, "simulated", True) or not self.settings.tts_prewarm:
+            logger.info(
+                "tts prewarm: skipped (tts=%s simulated=%s TTS_PREWARM=%s)",
+                getattr(self.tts, "name", "?"), getattr(self.tts, "simulated", True), self.settings.tts_prewarm,
+            )
             return 0
         languages = [x.strip() for x in self.settings.tts_prewarm_languages.split(",") if x.strip()]
         todo = [k for k in self.fixed_prompts(languages) if k not in self._tts_fixed]
+        if todo:
+            logger.info(
+                "tts prewarm: starting %d fixed prompts (%s), %d at a time",
+                len(todo), ",".join(languages), max(1, self.settings.tts_prewarm_concurrency),
+            )
         gate = asyncio.Semaphore(max(1, self.settings.tts_prewarm_concurrency))
         started = time.perf_counter()
 

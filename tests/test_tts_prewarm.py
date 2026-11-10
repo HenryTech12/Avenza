@@ -100,3 +100,18 @@ async def test_prewarm_survives_a_failing_prompt_and_skips_simulated_tts(service
     o.settings = dataclasses.replace(o.settings, tts_prewarm=False)
     o._tts_fixed.clear()
     assert await o.prewarm_tts() == 0
+
+
+async def test_prewarm_logs_when_it_starts_and_when_it_is_skipped(services, caplog):
+    """An empty `grep "tts prewarm"` must mean old code, not a silent skip (10 Nov)."""
+    import logging
+
+    o = services["orchestrator"]
+    with caplog.at_level(logging.INFO, logger="avenza.orchestrator"):
+        await o.prewarm_tts()  # mock TTS: simulated
+        o.tts = CountingTTS()
+        await o.prewarm_tts()
+    lines = [r.getMessage() for r in caplog.records if "tts prewarm" in r.getMessage()]
+    assert lines[0].startswith("tts prewarm: skipped (tts=")
+    assert lines[1].startswith("tts prewarm: starting ")
+    assert " fixed prompts cached in " in lines[2]
