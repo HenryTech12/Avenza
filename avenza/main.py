@@ -5,6 +5,7 @@ import hashlib
 import hmac
 import ipaddress
 import json
+from pathlib import Path
 import logging
 import time
 from collections import OrderedDict
@@ -112,6 +113,46 @@ def _extract_token(authorization: str | None, x_device_token: str | None) -> str
 
 
 _LOCAL_HOSTS = {"localhost", "testclient"}
+
+
+# First path segments that belong to the API. An unknown path under one of
+# these is a 404 (JSON), never the frontend's index.html.
+API_PREFIXES = {
+    "api", "ws", "hooks", "dev", "audit", "me", "transfers", "devices", "consents",
+    "locks", "health", "healthz", "config", "prompts", "static", "docs", "redoc", "openapi.json",
+}
+
+
+def _mount_frontend(app: FastAPI, dist: Path) -> None:
+    """Serve a built single-page app (Vite) from ``dist`` on the API's origin.
+
+    Same origin as the API means the passkey RP ID, CORS and the WebSocket
+    origin need no change. Registered last, so API routes always win:
+
+    * a real file in ``dist`` is served (hashed assets cached for a year);
+    * any other GET outside the API prefixes gets ``index.html`` (no-cache),
+      so refreshing a client-side route like /settings works.
+    """
+    root = dist.resolve()
+
+    @app.get("/{path:path}", include_in_schema=False)
+    def frontend_app(path: str):
+        first = path.split("/", 1)[0]
+        if first in API_PREFIXES:
+            return JSONResponse({"detail": "Not Found"}, status_code=404)
+        if path:
+            candidate = (root / path).resolve()
+            if candidate.is_file() and root in candidate.parents:
+                headers = (
+                    {"Cache-Control": "public, max-age=31536000, immutable"}
+                    if candidate.parent.name == "assets"
+                    else {"Cache-Control": "no-cache"}
+                )
+                return FileResponse(candidate, headers=headers)
+            if "." in path.rsplit("/", 1)[-1]:
+                # A missing file (e.g. an old asset hash): a real 404, not HTML.
+                return JSONResponse({"detail": "Not Found"}, status_code=404)
+        return FileResponse(root / "index.html", headers={"Cache-Control": "no-cache"})
 
 
 def verify_forge_signature(raw: bytes, timestamp: str, signature: str, secret: str, now: float | None = None) -> bool:
@@ -766,27 +807,33 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.mount("/static", StaticFiles(directory=str(settings.web_dir)), name="static")
     app.mount("/prompts", StaticFiles(directory=str(settings.prompt_dir)), name="prompts")
 
-    @app.get("/")
-    def index():
-        path = settings.web_dir / "index.html"
-        if not path.exists():
-            return JSONResponse({"detail": "PWA not built"}, status_code=404)
-        return FileResponse(path)
-
-    @app.get("/manifest.webmanifest")
-    def manifest():
-        return FileResponse(settings.web_dir / "manifest.webmanifest", media_type="application/manifest+json")
-
-    @app.get("/sw.js")
-    def service_worker():
-        return FileResponse(settings.web_dir / "sw.js", media_type="application/javascript")
-
-    @app.get("/favicon.ico")
-    def favicon():
-        path = settings.web_dir / "icons" / "icon-192.png"
-        if path.exists():
+    frontend = settings.frontend_dist
+    serve_frontend = (frontend / "index.html").is_file()
+    if serve_frontend:
+        logger.info("serving the frontend app from %s", frontend)
+        _mount_frontend(app, frontend)
+    else:
+        @app.get("/")
+        def index():
+            path = settings.web_dir / "index.html"
+            if not path.exists():
+                return JSONResponse({"detail": "PWA not built"}, status_code=404)
             return FileResponse(path)
-        return JSONResponse(status_code=204, content=None)
+
+        @app.get("/manifest.webmanifest")
+        def manifest():
+            return FileResponse(settings.web_dir / "manifest.webmanifest", media_type="application/manifest+json")
+
+        @app.get("/sw.js")
+        def service_worker():
+            return FileResponse(settings.web_dir / "sw.js", media_type="application/javascript")
+
+        @app.get("/favicon.ico")
+        def favicon():
+            path = settings.web_dir / "icons" / "icon-192.png"
+            if path.exists():
+                return FileResponse(path)
+            return JSONResponse(status_code=204, content=None)
 
     @app.exception_handler(ApprovalError)
     async def approval_error_handler(request: Request, exc: ApprovalError):

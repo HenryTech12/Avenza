@@ -154,6 +154,9 @@ class Settings:
     admin_token: str = ""
 
     web_dir: Path = field(default_factory=lambda: PROJECT_ROOT / "web")
+    # The frontend team's built app (frontend/dist). When it exists it is served
+    # at "/" on the same origin as the API; otherwise the legacy web/ PWA is.
+    frontend_dist: Path = field(default_factory=lambda: PROJECT_ROOT / "frontend" / "dist")
     prompt_dir: Path = field(default_factory=lambda: PROJECT_ROOT / "web" / "prompts")
 
     @property
@@ -276,5 +279,6 @@ def load_settings() -> Settings:
         allow_dev_approval=_bool("ALLOW_DEV_APPROVAL", False),
         admin_token=os.getenv("ADMIN_TOKEN", ""),
         web_dir=PROJECT_ROOT / os.getenv("WEB_DIR", "web"),
+        frontend_dist=PROJECT_ROOT / os.getenv("FRONTEND_DIST", "frontend/dist"),
         prompt_dir=PROJECT_ROOT / os.getenv("WEB_DIR", "web") / "prompts",
     )

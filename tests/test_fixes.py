@@ -587,3 +587,47 @@ def test_recorded_clip_is_not_used_for_a_readback(tmp_path):
     library = PromptLibrary(tmp_path)
     assert library.render("readback", recipient="A").audio_url is None
     assert library.render("cancelled").audio_url == "/prompts/en-cancelled.wav"
+
+
+# ---------------------------------------------------------------------------
+# 13. The frontend app is served on the API's origin
+# ---------------------------------------------------------------------------
+
+
+def _frontend_client(tmp_path):
+    dist = tmp_path / "dist"
+    (dist / "assets").mkdir(parents=True)
+    (dist / "index.html").write_text("<html>frontend app</html>")
+    (dist / "assets" / "app-1a2b3c.js").write_text("console.log(1)")
+    (dist / "sw.js").write_text("self.addEventListener('fetch', () => {})")
+    (tmp_path / "secret.txt").write_text("outside dist")
+    return TestClient(create_app(Settings().for_test(frontend_dist=dist)))
+
+
+def test_frontend_is_served_at_root_with_client_side_routes(tmp_path):
+    with _frontend_client(tmp_path) as client:
+        assert client.get("/").text == "<html>frontend app</html>"
+        refreshed = client.get("/settings")  # a client-side route
+        assert refreshed.text == "<html>frontend app</html>"
+        assert refreshed.headers["cache-control"] == "no-cache"
+        asset = client.get("/assets/app-1a2b3c.js")
+        assert asset.text == "console.log(1)" and "immutable" in asset.headers["cache-control"]
+        assert client.get("/sw.js").headers["content-type"].startswith(("application/javascript", "text/javascript"))
+
+
+def test_frontend_never_shadows_the_api(tmp_path):
+    with _frontend_client(tmp_path) as client:
+        assert client.get("/healthz").json() == {"ok": True}
+        assert client.get("/config").status_code == 200
+        assert client.get("/me").status_code == 401  # the API answered, not index.html
+        unknown_api = client.get("/transfers/does/not/exist")
+        assert unknown_api.status_code == 404 and unknown_api.headers["content-type"].startswith("application/json")
+        assert client.get("/assets/old-hash.js").status_code == 404  # missing file: not HTML
+        assert client.get("/../secret.txt").status_code in {404, 200} and "outside dist" not in client.get("/../secret.txt").text
+        assert "outside dist" not in client.get("/%2e%2e/secret.txt").text
+
+
+def test_legacy_pwa_is_served_without_a_frontend_build(tmp_path):
+    with TestClient(create_app(Settings().for_test(frontend_dist=tmp_path / "missing"))) as client:
+        assert client.get("/").status_code in {200, 404}
+        assert client.get("/sw.js").status_code == 200

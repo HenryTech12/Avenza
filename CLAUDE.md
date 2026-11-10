@@ -18,7 +18,8 @@ Avenza reads back the bank-verified name, the customer says yes, and only a
 | `avenza/bank/` | `mock.py` (local), `sandbox.py` (**Xtradot Bank**, the real Forge sandbox), `xtradot_sim.py` (local simulator of the sandbox) |
 | `avenza/providers/ai_speech.py` | Live STT (with provider fallback chain) and YarnGPT TTS wrappers |
 | `avenza_ai/` | AI package: amount/time parsers, LLM intent, `providers/ws_stt.py` (Deepgram, **YarnGPT ASR**, **Intron Sahara**), `providers/yarngpt_tts.py` |
-| `web/` | The PWA (frontend owner may replace it with their own app; it must be served by this backend on the same origin for passkeys) |
+| `frontend/` | The frontend team's app (Preact + TypeScript + Vite), from PR #1 `add-frontend`. Built inside the Docker image and served by the backend at `/` (same origin as the API). Env: `VITE_BACKEND_MODE`, `VITE_API_BASE_URL` (empty = same origin), `VITE_WS_URL` |
+| `web/` | Legacy PWA, served only when `frontend/dist` does not exist |
 | `deploy/forge/` | `app.yaml` (ConfigMap, Deployment, Service), `deploy.sh`, `env.forge.example` |
 | `scripts/` | `sandbox_smoke.py`, `register_webhook.py`, `latency_probe.py`, `latency_report.py` |
 | `docs/` | `FORGE.md` (platform runbook), `PROTOCOL.md` (WebSocket contract), `SECURITY.md` |
@@ -105,12 +106,21 @@ override the ConfigMap) and uses the `regcred` pull secret automatically.
    Email YarnGPT support with the trace ids if both stall.
 2. **Sahara on the cluster is unverified.** Run the latency probe once TTS works
    (≤3 turns a minute), or a direct Sahara test with a WAV.
-3. **`https://team18.xtradot.co/healthz` returns 302** since 9 Nov ~22:20 (was 200).
-   Check `curl -sI .../healthz` for `location:` — a platform login/redirect would also block the phone.
+3. **Cloudflare Access now fronts team18.xtradot.co**: every request gets a 302 to
+   `centrictech.cloudflareaccess.com` (since 9 Nov ~22:20). Ask the Forge organisers whether it
+   is intended and how judges/phones get in. With the frontend served on the same origin
+   (done), a browser that has logged in to Access carries the cookie to the API and WebSocket.
+   Cross-origin hosting (Vercel) would not work behind Access. In-cluster calls (bank webhooks
+   to `app.team18.svc.cluster.local`) are unaffected.
 4. **Phone end-to-end test not done yet** (voice + fingerprint + WebSocket through the gateway).
-5. **Frontend**: the frontend owner's app must be served by this backend
-   (`web/` or `WEB_DIR`) and follow `docs/PROTOCOL.md` (prompt.play.audio, vad_ms,
-   REVERSED state, transcript.partial, close code 4401).
+5. **Frontend (PR #1)**: backend side of "serve the frontend" is done (Dockerfile node stage +
+   `_mount_frontend` in `main.py`, SPA fallback, API prefixes never shadowed). To do: merge PR #1;
+   confirm the app treats an empty `VITE_API_BASE_URL` as same origin and derives `wss://` from
+   `location`; client-side routes must not reuse API paths (`/me`, `/transfers`, `/locks`,
+   `/config`, `/devices`, `/consents`, `/health*`, `/ws`, `/hooks`, `/dev`, `/audit`), because a
+   refresh on those would hit the API; check it handles `prompt.play.audio`, `vad_ms`,
+   `REVERSED`, `transcript.partial`, close code 4401 (`docs/PROTOCOL.md`). Live flows
+   (enrolment, WebSocket, fingerprint) are untested by the frontend team.
 6. **Latency numbers for Demo Day**: 20–30 real phone turns, then
    `kubectl exec deploy/app -- python scripts/latency_report.py /data/latency.jsonl`
    (before any redeploy). Consider streaming TTS audio to the phone as it arrives:

@@ -1,3 +1,23 @@
+# Stage 1: build the frontend app (frontend/), if the repo has one.
+# Same origin as the API: an empty VITE_API_BASE_URL means "this site".
+# Debian-based, not Alpine: TypeScript 7 and Vite 8 (rolldown) ship native
+# binaries, and the lockfile only has the glibc build of TypeScript's.
+FROM node:22-slim AS frontend
+WORKDIR /src
+COPY . .
+ARG VITE_BACKEND_MODE=live
+ARG VITE_API_BASE_URL=
+ENV VITE_BACKEND_MODE=$VITE_BACKEND_MODE VITE_API_BASE_URL=$VITE_API_BASE_URL
+RUN if [ -f frontend/package.json ]; then \
+        cd frontend \
+        && if [ -f package-lock.json ]; then npm ci; else npm install; fi \
+        && npm run build; \
+    else \
+        echo "no frontend/ in this commit: the legacy web/ PWA will be served"; \
+        mkdir -p frontend/dist; \
+    fi
+
+# Stage 2: the backend.
 FROM python:3.12-slim
 
 ENV PYTHONUNBUFFERED=1 \
@@ -18,6 +38,7 @@ COPY avenza ./avenza
 COPY avenza_ai ./avenza_ai
 COPY data ./data
 COPY web ./web
+COPY --from=frontend /src/frontend/dist ./frontend/dist
 COPY scripts ./scripts
 COPY run.py ./
 
