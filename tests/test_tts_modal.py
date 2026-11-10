@@ -91,7 +91,7 @@ class FakeHosted:
 
 
 async def test_wrapper_falls_back_to_the_hosted_api_when_modal_fails():
-    tts = AIModalYarnTTS(Settings().for_test(tts_provider="yarngpt-modal", yarngpt_modal_url=URL))
+    tts = AIModalYarnTTS(Settings().for_test(tts_provider="yarngpt-modal", yarngpt_modal_url=URL, yarngpt_modal_mode="all"))
     tts.modal = modal_with(lambda r: httpx.Response(503, text="no capacity"))
     tts.fallback = FakeHosted()
     res = await tts.synthesize("Hello there", language="en")
@@ -99,7 +99,7 @@ async def test_wrapper_falls_back_to_the_hosted_api_when_modal_fails():
 
 
 async def test_wrapper_uses_modal_audio_when_it_works():
-    tts = AIModalYarnTTS(Settings().for_test(tts_provider="yarngpt-modal", yarngpt_modal_url=URL))
+    tts = AIModalYarnTTS(Settings().for_test(tts_provider="yarngpt-modal", yarngpt_modal_url=URL, yarngpt_modal_mode="all"))
     tts.modal = modal_with(lambda r: httpx.Response(200, content=pcm_to_wav_bytes(tone_pcm(0.1, 24000), 24000)))
     tts.fallback = FakeHosted()
     res = await tts.synthesize("Hello there", language="en")
@@ -108,7 +108,46 @@ async def test_wrapper_uses_modal_audio_when_it_works():
 
 
 async def test_no_fallback_configured_gives_empty_audio_so_the_phone_speaks():
-    tts = AIModalYarnTTS(Settings().for_test(tts_provider="yarngpt-modal", yarngpt_modal_url=URL, yarngpt_api_key="", yarn_api_key=""))
+    tts = AIModalYarnTTS(Settings().for_test(tts_provider="yarngpt-modal", yarngpt_modal_url=URL, yarngpt_api_key="", yarn_api_key="", yarngpt_modal_mode="all"))
     tts.modal = modal_with(lambda r: httpx.Response(500))
     tts.fallback = None
     assert (await tts.synthesize("Hello there", language="en")).is_empty
+
+
+async def test_prewarm_mode_modal_voices_cached_prompts_and_live_replies_never_wait_for_it():
+    """Measured 10 Nov: ~21 s warm for 4.8 s of speech, far over the 6 s a live reply may wait."""
+    calls = []
+
+    def handler(req):
+        calls.append(json.loads(req.content)["text"])
+        return httpx.Response(200, content=pcm_to_wav_bytes(tone_pcm(0.1, 24000), 24000))
+
+    tts = AIModalYarnTTS(Settings().for_test(tts_provider="yarngpt-modal", yarngpt_modal_url=URL))  # default mode
+    tts.modal = modal_with(handler)
+    tts.fallback = FakeHosted()
+    cached = await tts.synthesize_for_cache("Cancelled. No money moved.", language="en")
+    assert cached.provider == "ai:yarngpt-modal" and calls == ["Cancelled. No money moved."]
+    live = await tts.synthesize("You are about to send five thousand naira.", language="en")
+    assert live.provider == "ai:yarngpt" and calls == ["Cancelled. No money moved."]  # Modal not called live
+    tts.fallback = None
+    assert (await tts.synthesize("Reply text here", language="en")).is_empty  # no hosted key: the phone speaks at once
+
+
+async def test_orchestrator_prewarm_uses_the_cache_path(services):
+    o = services["orchestrator"]
+    used = []
+
+    class Split:
+        name, simulated = "split", False
+
+        async def synthesize(self, text, voice="", language="en"):
+            used.append("live")
+            return AudioResult(b"\x01\x00" * 4, 24000, self.name, text=text)
+
+        async def synthesize_for_cache(self, text, voice="", language="en"):
+            used.append("cache")
+            return AudioResult(b"\x01\x00" * 4, 24000, self.name, text=text)
+
+    o.tts = Split()
+    await o.prewarm_tts()
+    assert used and set(used) == {"cache"}

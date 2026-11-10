@@ -181,8 +181,10 @@ class TurnOrchestrator:
                 if out_of_credit.is_set():
                     return False
                 try:
+                    # a provider can voice cached prompts differently from live replies (self-hosted Modal)
+                    make = getattr(self.tts, "synthesize_for_cache", self.tts.synthesize)
                     result = await asyncio.wait_for(
-                        self.tts.synthesize(key[1], language=key[0]),
+                        make(key[1], language=key[0]),
                         # a self-hosted model may need a minute to wake up on the first call
                         max(self.settings.tts_prewarm_timeout_s, getattr(self.tts, "prewarm_timeout_s", 0)),
                     )

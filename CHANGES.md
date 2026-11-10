@@ -14,6 +14,9 @@ new tests fail on the previous code, which shows they catch the defects below.
 - A cold Modal container takes about a minute: the pre-warm waits up to 120 s for it;
   `YARNGPT_MODAL_KEEPWARM_S=90` pings it so it stays warm during a demo.
 - `scripts/modal_tts_probe.py`: cold and warm timings per language, `--save` writes clips.
+- Measured: cold 42 s, warm 21–27 s for 3–5 s of speech. `YARNGPT_MODAL_MODE=prewarm`
+  (default) uses Modal only for the fixed prompts cached at startup; live replies go to
+  the hosted API (or the phone's voice at once) instead of waiting 6 s and timing out.
 
 ## 10 November 2026 (evening): animated splash, onboarding as one conversation
 

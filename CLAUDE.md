@@ -95,7 +95,10 @@ override the ConfigMap) and uses the `regcred` pull secret automatically.
   falls back to the catalogue default. Every call spends real credits.
 - TTS (self-hosted, 10 Nov): open-source YarnGPT on Modal, `TTS_PROVIDER=yarngpt-modal` +
   `YARNGPT_MODAL_URL` (**only in `.env`/`.env.forge`: the endpoint is unauthenticated, the repo is public**).
-  Cold start ~1 min; `YARNGPT_MODAL_KEEPWARM_S=90` during demos. Probe: `python scripts/modal_tts_probe.py --save`.
+  Measured 10 Nov: cold 42 s, **warm ~21–27 s for 3–5 s of speech** (too slow for live replies;
+  likely no GPU or model reloaded per request on the Modal side). So `YARNGPT_MODAL_MODE=prewarm`
+  (default): Modal voices the ~50 fixed prompts at startup, live replies use the hosted API or the
+  phone. Switch to `all` only once a warm call is under ~3 s. Probe: `python scripts/modal_tts_probe.py --save`.
 - LLM: Groq for testing (LLM_ lines in `.env.forge`); **Demo Day uses Huawei MaaS**
   (`glm-5.2`, thinking off): delete the LLM_ lines from `.env.forge` and redeploy.
 

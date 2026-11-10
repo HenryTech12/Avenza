@@ -149,6 +149,9 @@ class Settings:
     yarngpt_modal_url: str = ""
     yarngpt_modal_speakers: str = ""
     yarngpt_modal_keepwarm_s: int = 0
+    # "prewarm": Modal voices the fixed prompts cached at startup; live replies use the hosted API
+    # (or the phone). "all": Modal for everything (only when it answers within TTS_TIMEOUT_S).
+    yarngpt_modal_mode: str = "prewarm"
 
     webauthn_rp_id: str = "localhost"
     webauthn_rp_name: str = "Avenza"
@@ -288,6 +291,7 @@ def load_settings() -> Settings:
         yarngpt_modal_url=os.getenv("YARNGPT_MODAL_URL", ""),
         yarngpt_modal_speakers=os.getenv("YARNGPT_MODAL_SPEAKERS", ""),
         yarngpt_modal_keepwarm_s=_int("YARNGPT_MODAL_KEEPWARM_S", 0),
+        yarngpt_modal_mode=os.getenv("YARNGPT_MODAL_MODE", "prewarm").strip().lower(),
         webauthn_rp_id=os.getenv("WEBAUTHN_RP_ID", "localhost"),
         webauthn_rp_name=os.getenv("WEBAUTHN_RP_NAME", "Avenza"),
         webauthn_origin=os.getenv("WEBAUTHN_ORIGIN", "http://localhost:8000"),

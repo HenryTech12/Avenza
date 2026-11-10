@@ -398,6 +398,16 @@ class AIModalYarnTTS(TTSProvider):
             self.fallback = None
 
     async def synthesize(self, text: str, voice: str = "", language: str = "en") -> AudioResult:
+        """A live reply. In "prewarm" mode (default) Modal is too slow to wait for (measured 10 Nov:
+        ~21 s warm for 4.8 s of speech), so the hosted API answers, or the phone speaks at once."""
+        if self.settings.yarngpt_modal_mode != "all":
+            if self.fallback is not None:
+                return await self.fallback.synthesize(text, voice, language)
+            return AudioResult(b"", 24000, self.name, text=text, simulated=False)
+        return await self.synthesize_for_cache(text, voice, language)
+
+    async def synthesize_for_cache(self, text: str, voice: str = "", language: str = "en") -> AudioResult:
+        """Fixed prompts generated in the background at startup: Modal's speed does not matter here."""
         start = time.perf_counter()
         try:
             result = await self.modal.synthesize(text, voice or None, language)
