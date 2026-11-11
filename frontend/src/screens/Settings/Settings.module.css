@@ -1,33 +1,35 @@
 .head {
   display: flex;
   align-items: center;
-  gap: var(--space-1);
-  margin-left: calc(-1 * var(--space-1));
+  gap: var(--space-2);
 }
 .back {
   display: grid;
   place-items: center;
-  width: var(--tap);
-  height: var(--tap);
-  background: none;
-  border: 0;
-  border-radius: 50%;
+  flex: none;
+  width: 48px;
+  height: 48px;
+  background: var(--card-bg);
+  border: var(--border-width) solid var(--card-border);
+  border-radius: 16px;
   color: var(--text);
+  box-shadow: var(--card-shadow);
 }
 .group {
   display: flex;
   flex-direction: column;
-  background: var(--surface);
-  border: var(--border-width) solid var(--border);
+  background: var(--card-bg);
+  border: var(--border-width) solid var(--card-border);
   border-radius: var(--radius-card);
+  box-shadow: var(--card-shadow);
   overflow: hidden;
 }
 .groupTitle {
-  font-size: var(--fs-label);
+  font-size: 0.78rem;
   color: var(--text-muted);
-  padding: 12px var(--space-2) 0;
+  padding: 14px var(--space-2) 2px;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.1em;
 }
 .row {
   display: flex;
@@ -35,32 +37,34 @@
   gap: var(--space-2);
   width: 100%;
   min-height: var(--tap);
-  padding: 8px var(--space-2);
+  padding: 10px var(--space-2);
   background: none;
   border: 0;
-  border-bottom: var(--border-width) solid var(--border);
+  border-bottom: var(--border-width) solid var(--card-border);
   color: var(--text);
   text-align: left;
 }
 .group > .row:last-child { border-bottom: 0; }
+button.row:active { background: var(--accent-soft); }
 .label { flex: 1; font-weight: 700; }
-.value { color: var(--text-muted); }
+.value { color: var(--text-muted); text-align: right; overflow-wrap: anywhere; }
 .dangerRow { color: var(--danger); }
 .segment {
   display: inline-flex;
   padding: 3px;
   border-radius: var(--radius-pill);
   background: var(--bg);
-  border: var(--border-width) solid var(--border);
+  border: var(--border-width) solid var(--card-border);
 }
 .seg {
   min-height: 44px;
-  padding: 0 14px;
+  padding: 0 12px;
   border: 0;
   border-radius: var(--radius-pill);
   background: transparent;
   color: var(--text-muted);
   font-weight: 700;
+  font-size: 0.9rem;
 }
 .segOn {
   background: var(--accent);
@@ -105,7 +109,15 @@
 .about > div {
   display: flex;
   justify-content: space-between;
+  gap: var(--space-2);
   padding: 10px var(--space-2);
 }
 .about dt { color: var(--text-muted); }
-.about dd { margin: 0; font-weight: 700; font-variant-numeric: tabular-nums; }
+.about dd { margin: 0; font-weight: 700; font-variant-numeric: tabular-nums; text-align: right; }
+
+@media (max-width: 380px) {
+  /* the theme control drops under its label instead of squeezing it */
+  .row:has(.segment) { flex-wrap: wrap; }
+  .row .segment { width: 100%; }
+  .row .segment .seg { flex: 1; }
+}

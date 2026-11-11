@@ -24,9 +24,10 @@
   gap: 12px;
   align-items: flex-start;
   padding: var(--space-2);
-  background: var(--surface);
-  border: var(--border-width) solid var(--border);
+  background: var(--card-bg);
+  border: var(--border-width) solid var(--card-border);
   border-radius: var(--radius-card);
+  box-shadow: var(--card-shadow);
 }
 .list li svg {
   flex: none;

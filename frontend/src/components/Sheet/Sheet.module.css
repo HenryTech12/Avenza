@@ -10,6 +10,7 @@
   position: absolute;
   inset: 0;
   background: rgb(5 9 18 / 0.62);
+  backdrop-filter: blur(4px);
   animation: fade var(--dur) var(--ease);
 }
 .sheet {
@@ -20,19 +21,20 @@
   flex-direction: column;
   gap: var(--space-2);
   padding: var(--space-1) var(--space-3) calc(var(--space-3) + env(safe-area-inset-bottom));
-  background: var(--surface-raised);
-  border: var(--border-width) solid var(--border);
+  background: var(--card-bg-raised);
+  border: var(--border-width) solid var(--card-border);
   border-bottom: 0;
-  border-radius: 24px 24px 0 0;
+  border-radius: 28px 28px 0 0;
   box-shadow: var(--shadow);
   animation: rise 250ms var(--ease);
 }
 .grip {
   align-self: center;
-  width: 40px;
-  height: 4px;
-  border-radius: 2px;
-  background: var(--border);
+  width: 44px;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--text-muted);
+  opacity: 0.5;
   margin-bottom: var(--space-1);
 }
 .head {

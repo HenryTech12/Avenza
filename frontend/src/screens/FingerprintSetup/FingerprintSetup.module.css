@@ -41,7 +41,7 @@
   padding: 0 var(--space-2);
   border-radius: var(--radius-card);
   border: var(--border-width) solid var(--text-muted);
-  background: var(--surface);
+  background: var(--card-bg);
   color: var(--text);
   font: inherit;
 }

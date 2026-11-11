@@ -15,7 +15,7 @@ from .intent import Intent, IntentClassifier, language_request
 from .langdetect import detect_language
 from .latency import LatencyLog, Turn
 from .money import format_naira
-from .parser import ParseError, extract_transfer_fields, normalize, parse_history_query
+from .parser import AccountNumber, ParseError, extract_transfer_fields, normalize, parse_history_query
 from .prompts import PROMPTS, PromptLibrary, period_text, status_text
 from .services import DraftActive, SessionService, TransferLocked, TransferService
 from .state_machine import TransferState, display_state
@@ -637,6 +637,17 @@ class TurnOrchestrator:
         return events
 
     async def process_text(self, ctx: SessionContext, text: str) -> list[dict]:
+        events = await self._process_text(ctx, text)
+        if self.settings.log_transcripts:
+            logger.info(
+                "heard %r -> prompts=%s errors=%s",
+                text,
+                [e.get("id") for e in events if e.get("type") == "prompt.play"],
+                [e.get("code") for e in events if e.get("type") == "error"],
+            )
+        return events
+
+    async def _process_text(self, ctx: SessionContext, text: str) -> list[dict]:
         async with ctx.lock:
             ctx.unclear_count = max(0, ctx.unclear_count)
             events = self._expire_events(ctx)
@@ -818,6 +829,18 @@ class TurnOrchestrator:
                 fields.amount_error = issue
         acc = ctx.accumulator
 
+        # While Avenza waits for the account number, the answer is not a new amount: digits read
+        # aloud ("0123 987 001") must not overwrite or wipe the amount already given.
+        awaiting_account = (
+            bool(acc.get("account_asked"))
+            and "amount" in acc
+            and "account" not in acc
+            and fields.account is None
+        )
+        if awaiting_account:
+            fields.amount = None
+            fields.amount_error = None
+
         if fields.amount is not None:
             acc["amount"] = fields.amount
             acc.pop("amount_error", None)
@@ -842,6 +865,18 @@ class TurnOrchestrator:
         if fields.recipient_hint:
             acc["hint"] = fields.recipient_hint
 
+        # Demo default: speech recognition garbles account numbers. Avenza still asks for the number by
+        # voice; if the answer to that question has no usable number, the configured one is used. The
+        # verified name is read back and only the fingerprint moves money, as for a spoken number.
+        default_account = self.settings.demo_default_account
+        if default_account and "account" not in acc and acc.get("account_asked"):
+            acc.pop("account_error", None)
+            acc["account"] = AccountNumber(default_account, default_account)
+            logger.info("no usable account number heard; using DEMO_DEFAULT_ACCOUNT ending %s", default_account[-4:])
+            self.transfers.audit.record_standalone(
+                "account.default_used", details={"account_last4": default_account[-4:]}
+            )
+
         if acc.get("amount_error") == "amount_too_large":
             acc.pop("amount_error", None)
             events.append(
@@ -860,6 +895,7 @@ class TurnOrchestrator:
             return events
         if acc.get("account_error") == "ambiguous_account":
             acc.pop("account_error", None)
+            acc["account_asked"] = True
             events.append(self._error("ambiguous_account", "clarify_account", "unclear account number"))
             events.append(self._prompt(ctx, "clarify_account"))
             events.append(self._listening())
@@ -873,6 +909,7 @@ class TurnOrchestrator:
             elif missing[0] == "amount":
                 events.append(self._prompt(ctx, "ask_amount"))
             elif missing[0] == "account":
+                acc["account_asked"] = True
                 events.append(self._prompt(ctx, "ask_account"))
             else:
                 events.append(self._prompt(ctx, "ask_bank"))
@@ -889,6 +926,7 @@ class TurnOrchestrator:
             info = await self.bank.name_enquiry(bank.code, account.value)
         except BankNotFound:
             acc.pop("account", None)
+            acc["account_asked"] = True
             self.transfers.audit.record_standalone(
                 "name.not_found",
                 details={"bank_code": bank.code, "account_last4": account.value[-4:]},

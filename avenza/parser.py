@@ -502,21 +502,40 @@ def _raw(tokens: list[Token], start: int, end: int) -> str:
     return " ".join(t.word for t in tokens[start:end])
 
 
+def _digits_of(token: Token) -> str | None:
+    """The digits a token stands for: a digit word ("seven", "oh") or a run of digits, ignoring the
+    commas and full stops speech recognition puts between spoken digits ("zero, one, two...")."""
+    word = token.word.strip(".,")
+    if word in _DIGIT_WORDS:
+        return str(_DIGIT_WORDS[word])
+    if word.isdigit():
+        return word
+    return None
+
+
 def _spoken_accounts(tokens: list[Token]) -> list[tuple[str, int, int]]:
+    """Ten digits spoken one by one, in groups ("0123 987 001") or as words, possibly with
+    punctuation between them. Grouped digits must start with 0, as account numbers do, so that a
+    spaced-out amount is never taken for an account."""
     found: list[tuple[str, int, int]] = []
     i = 0
     while i < len(tokens):
-        if tokens[i].word in _DIGIT_WORDS:
-            j = i
-            digits: list[str] = []
-            while j < len(tokens) and tokens[j].word in _DIGIT_WORDS:
-                digits.append(str(_DIGIT_WORDS[tokens[j].word]))
-                j += 1
-            if len(digits) == 10:
-                found.append(("".join(digits), i, j))
-            i = j
-        else:
+        if _digits_of(tokens[i]) is None:
             i += 1
+            continue
+        j = i
+        parts: list[str] = []
+        while j < len(tokens):
+            part = _digits_of(tokens[j])
+            if part is None:
+                break
+            parts.append(part)
+            j += 1
+        digits = "".join(parts)
+        singles = all(len(p) == 1 for p in parts)
+        if len(digits) == 10 and (singles or parts[0].startswith("0")):
+            found.append((digits, i, j))
+        i = j
     return found
 
 
@@ -574,10 +593,9 @@ def parse_amount(text: str, max_kobo: int = 100_000_000) -> ParsedAmount:
         suffix = (m.group(3) or "").lower()
         span_text = m.group(0).strip()
 
-        # A bare 10-digit run is an account number, not money.
-        if len(m.group(1)) == 10 and not frac and not suffix:
-            continue
-        if len(m.group(1)) > 10 and not suffix:
+        # A bare run of eight or more digits is an account number (or a part of one that speech
+        # recognition cut short, e.g. nine of ten digits), never money: the limit is far below it.
+        if len(m.group(1)) >= 8 and not frac and not suffix:
             continue
 
         multiplier = _MULTIPLIERS.get(suffix, 1)

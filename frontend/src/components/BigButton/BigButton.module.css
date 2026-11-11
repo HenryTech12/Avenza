@@ -14,6 +14,7 @@
   transition:
     transform var(--dur) var(--ease),
     background-color var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease),
     opacity var(--dur) var(--ease);
 }
 .btn:active:not(:disabled) {
@@ -26,19 +27,22 @@
 .primary {
   background: var(--accent);
   color: var(--on-accent);
+  box-shadow: 0 8px 22px color-mix(in srgb, var(--accent) 32%, transparent);
 }
 .secondary {
-  background: var(--surface);
+  background: var(--card-bg);
   color: var(--text);
-  border-color: var(--border);
+  border-color: var(--card-border);
+  box-shadow: var(--card-shadow);
 }
 .danger {
-  background: transparent;
+  background: var(--danger-soft);
   color: var(--danger);
-  border-color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 55%, transparent);
 }
 :global([data-contrast='high']) .primary {
   border-color: var(--text);
+  box-shadow: none;
 }
 .spinner {
   width: 1.1em;

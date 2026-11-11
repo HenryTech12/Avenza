@@ -30,10 +30,11 @@
   gap: 6px;
   min-height: 120px;
   padding: var(--space-2);
-  background: var(--surface);
+  background: var(--card-bg);
   color: var(--text);
-  border: var(--border-width) solid var(--border);
+  border: var(--border-width) solid var(--card-border);
   border-radius: var(--radius-card);
+  box-shadow: var(--card-shadow);
   transition: transform var(--dur) var(--ease), border-color var(--dur) var(--ease);
 }
 .tile:active:not(:disabled) {

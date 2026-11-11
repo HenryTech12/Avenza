@@ -36,7 +36,28 @@
   --space-6: 48px;
   --space-8: 64px;
 
-  --radius-card: 20px;
+  --radius-card: 24px;
+  --radius-tile: 20px;
+  --radius-sm: 14px;
+
+  /* Glass surfaces: a soft top-lit gradient over the solid surface colour (so contrast is always checked on the solid). */
+  --card-bg: linear-gradient(160deg, rgb(255 255 255 / 0.07), rgb(255 255 255 / 0.02)), var(--surface);
+  --card-bg-raised: linear-gradient(160deg, rgb(255 255 255 / 0.09), rgb(255 255 255 / 0.025)), var(--surface-raised);
+  --card-border: rgb(255 255 255 / 0.09);
+  --card-shadow: 0 10px 30px rgb(0 0 0 / 0.28), inset 0 1px 0 rgb(255 255 255 / 0.06);
+  /* Balance hero */
+  --hero-bg: radial-gradient(120% 140% at 100% 0%, rgb(61 217 179 / 0.30) 0%, transparent 55%),
+    linear-gradient(145deg, #1b3b6b 0%, #13264a 55%, #0f1d38 100%);
+  --hero-text: #ffffff;
+  --hero-muted: rgb(255 255 255 / 0.82);
+  --hero-border: rgb(255 255 255 / 0.14);
+  --hero-chip: rgb(255 255 255 / 0.12);
+  /* Page backdrop: two soft glows and a faint grid, like a banking dashboard */
+  --page-bg:
+    radial-gradient(900px 420px at 85% -8%, rgb(61 217 179 / 0.14), transparent 62%),
+    radial-gradient(800px 520px at -12% 8%, rgb(70 110 255 / 0.20), transparent 60%),
+    linear-gradient(rgb(255 255 255 / 0.025) 1px, transparent 1px) 0 0 / 36px 36px,
+    linear-gradient(90deg, rgb(255 255 255 / 0.025) 1px, transparent 1px) 0 0 / 36px 36px;
   /* Pearl look (prototype, 10 Nov): soft page wash and a pearl orb. */
   --page-wash: linear-gradient(180deg, #f6f1ea 0%, #efe8df 100%);
   --pearl: radial-gradient(circle at 35% 30%, #ffffff 0%, #f6efe6 28%, #e3d6e6 55%, #cfd8ea 75%, #b9c3d8 100%);
@@ -44,7 +65,8 @@
   --font-display: 'Atkinson Hyperlegible', system-ui, sans-serif;
   --radius-pill: 999px;
   --tap: 56px;
-  --max-width: 480px;
+  --max-width: 520px;
+  --nav-h: 76px;
 
   --dur: 200ms;
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
@@ -65,6 +87,14 @@
   --danger: #b42318;
   --simulated: #6d28d9;
   --shadow: 0 10px 30px rgb(60 48 32 / 0.08);
+  --card-bg: linear-gradient(160deg, #ffffff, #fbf8f4);
+  --card-bg-raised: linear-gradient(160deg, #ffffff, #fdfbf8);
+  --card-border: var(--border);
+  --card-shadow: 0 8px 24px rgb(60 48 32 / 0.08);
+  --hero-bg: radial-gradient(120% 140% at 100% 0%, rgb(255 255 255 / 0.16) 0%, transparent 55%),
+    linear-gradient(145deg, #34476a 0%, #2c3a4f 60%, #232f43 100%);
+  --hero-border: rgb(44 58 79 / 0.4);
+  --page-bg: none;
 }
 
 @media (prefers-color-scheme: light) {
@@ -82,5 +112,13 @@
     --danger: #b42318;
     --simulated: #6d28d9;
     --shadow: 0 10px 30px rgb(60 48 32 / 0.08);
+    --card-bg: linear-gradient(160deg, #ffffff, #fbf8f4);
+    --card-bg-raised: linear-gradient(160deg, #ffffff, #fdfbf8);
+    --card-border: var(--border);
+    --card-shadow: 0 8px 24px rgb(60 48 32 / 0.08);
+    --hero-bg: radial-gradient(120% 140% at 100% 0%, rgb(255 255 255 / 0.16) 0%, transparent 55%),
+      linear-gradient(145deg, #34476a 0%, #2c3a4f 60%, #232f43 100%);
+    --hero-border: rgb(44 58 79 / 0.4);
+    --page-bg: none;
   }
 }

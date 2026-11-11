@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import dataclasses
+
 import pytest
 from sqlalchemy import select
 
@@ -173,3 +175,138 @@ async def test_unsupported_currency_is_refused(services):
     assert "ambiguous_amount" in error_codes(events)
     with services["session_factory"]() as db:
         assert db.scalars(select(Transfer)).all() == []
+
+
+def with_default_account(services, number: str = "0123456789"):
+    orchestrator = services["orchestrator"]
+    orchestrator.settings = dataclasses.replace(orchestrator.settings, demo_default_account=number)
+    return orchestrator
+
+
+async def test_default_account_is_used_after_the_question_is_asked(services):
+    customer = make_customer(services)
+    orchestrator = with_default_account(services)
+
+    # The account number is still asked for by voice, and nothing is drafted yet.
+    asked = await orchestrator.process_text(customer.ctx, "Send five thousand naira to GTBank")
+    assert "ask_account" in prompt_ids(asked)
+    assert "readback" not in prompt_ids(asked)
+    with services["session_factory"]() as db:
+        assert db.scalars(select(Transfer).where(Transfer.user_id == customer.user_id)).all() == []
+
+    # An answer with no usable number falls back to the default account.
+    events = await orchestrator.process_text(customer.ctx, "umm uh")
+    assert "ask_account" not in prompt_ids(events)
+    assert "readback" in prompt_ids(events)
+    assert states(events) == [TransferState.READBACK_PLAYED.value]
+    with services["session_factory"]() as db:
+        row = db.scalars(select(Transfer).where(Transfer.user_id == customer.user_id)).one()
+        assert row.account_number == "0123456789"
+
+
+async def test_default_account_replaces_an_unclear_number_after_one_clarification(services):
+    customer = make_customer(services)
+    orchestrator = with_default_account(services)
+
+    first = await orchestrator.process_text(
+        customer.ctx, "Send five thousand naira to GTBank 0123456789 or 0987654321"
+    )
+    assert "clarify_account" in prompt_ids(first)
+    assert "readback" not in prompt_ids(first)
+
+    events = await orchestrator.process_text(customer.ctx, "umm uh")
+    assert "readback" in prompt_ids(events)
+
+
+async def test_a_clearly_spoken_answer_beats_the_default(services):
+    customer = make_customer(services)
+    orchestrator = with_default_account(services, "0123456789")
+
+    asked = await orchestrator.process_text(customer.ctx, "Send five thousand naira to GTBank")
+    assert "ask_account" in prompt_ids(asked)
+
+    events = await orchestrator.process_text(customer.ctx, "0987654321")
+    assert "readback" in prompt_ids(events)
+    with services["session_factory"]() as db:
+        row = db.scalars(select(Transfer).where(Transfer.user_id == customer.user_id)).one()
+        assert row.account_number == "0987654321"
+
+
+async def test_default_account_still_needs_the_fingerprint(services):
+    customer = make_customer(services)
+    orchestrator = with_default_account(services)
+
+    await orchestrator.process_text(customer.ctx, "Send five thousand naira to GTBank")
+    await orchestrator.process_text(customer.ctx, "umm uh")
+    second = await orchestrator.process_text(customer.ctx, "yes")
+    assert states(second) == [TransferState.AWAITING_BIOMETRIC.value]
+    assert any(event["type"] == "approval.request" for event in second)
+    with services["session_factory"]() as db:
+        row = db.scalars(select(Transfer).where(Transfer.user_id == customer.user_id)).one()
+        assert row.state != TransferState.SETTLED.value
+
+
+async def test_without_a_default_the_account_question_repeats(services):
+    customer = make_customer(services)
+    orchestrator = services["orchestrator"]
+
+    await orchestrator.process_text(customer.ctx, "Send five thousand naira to GTBank")
+    events = await orchestrator.process_text(customer.ctx, "umm uh")
+    assert "readback" not in prompt_ids(events)
+
+
+def test_default_account_setting_must_be_ten_digits(monkeypatch):
+    from avenza.config import load_settings
+
+    monkeypatch.setenv("DEMO_DEFAULT_ACCOUNT", "0123987001")
+    assert load_settings().demo_default_account == "0123987001"
+    monkeypatch.setenv("DEMO_DEFAULT_ACCOUNT", "12345")
+    assert load_settings().demo_default_account == ""
+    monkeypatch.delenv("DEMO_DEFAULT_ACCOUNT")
+    assert load_settings().demo_default_account == ""
+
+
+async def test_digits_read_aloud_do_not_wipe_the_amount(services):
+    customer = make_customer(services)
+    orchestrator = with_default_account(services, "0123456789")
+
+    await orchestrator.process_text(customer.ctx, "Send five thousand naira to GTBank")
+    # a partial number: not an account, and not a new (or unclear) amount either
+    events = await orchestrator.process_text(customer.ctx, "0123 98")
+    assert "clarify_amount" not in prompt_ids(events)
+    assert "ask_amount" not in prompt_ids(events)
+    assert "readback" in prompt_ids(events)
+    with services["session_factory"]() as db:
+        row = db.scalars(select(Transfer).where(Transfer.user_id == customer.user_id)).one()
+        assert row.amount_kobo == 500_000
+
+
+async def test_grouped_digits_answer_the_account_question(services):
+    customer = make_customer(services)
+    orchestrator = services["orchestrator"]
+
+    await orchestrator.process_text(customer.ctx, "Send five thousand naira to GTBank")
+    events = await orchestrator.process_text(customer.ctx, "0123 456 789")
+    assert "readback" in prompt_ids(events)
+
+
+async def test_partial_account_in_the_first_sentence_asks_then_uses_the_default(services):
+    customer = make_customer(services)
+    orchestrator = with_default_account(services, "0123456789")
+
+    # Phone test, 11 Nov: nine of ten digits heard, which was read as a second (unclear) amount.
+    first = await orchestrator.process_text(customer.ctx, "I would love to send money")
+    assert "ask_all" in prompt_ids(first)
+    events = await orchestrator.process_text(
+        customer.ctx, "di amount is 5000 naira to gtbank 012345678"
+    )
+    assert "clarify_amount" not in prompt_ids(events)
+    assert error_codes(events) == []
+    assert "ask_account" in prompt_ids(events)
+
+    events = await orchestrator.process_text(customer.ctx, "umm uh")
+    assert "readback" in prompt_ids(events)
+    with services["session_factory"]() as db:
+        row = db.scalars(select(Transfer).where(Transfer.user_id == customer.user_id)).one()
+        assert row.amount_kobo == 500_000
+        assert row.account_number == "0123456789"

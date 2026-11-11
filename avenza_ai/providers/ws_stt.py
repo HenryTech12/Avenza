@@ -18,7 +18,7 @@ class _WSStream(STTStream):
         self._ws = None
         self._reader: Optional[asyncio.Task] = None
         self._open_lock = asyncio.Lock()
-        self._state: dict = {}  # per-stream scratch space for provider framing
+        self._state: dict = {"rate": sample_rate}  # per-stream scratch space for provider framing
 
     async def _ensure_open(self) -> None:
         async with self._open_lock:
@@ -261,6 +261,23 @@ class YarnGPTSTTProvider(_GenericWSProvider):
             "audio": {"encoding": "pcm_s16le", "sample_rate": int(sample_rate), "channels": 1},
             "options": {"endpoint_silence_ms": self.endpoint_silence_ms, "partials": True},
         })
+
+    # YarnGPT rejects a stream under 2 s of audio (INPUT_TOO_SHORT). Short answers such as a
+    # spoken account number are padded with silence to this length, never dropped.
+    MIN_SECONDS = 2.1
+
+    def frame_audio(self, state: dict, pcm: bytes) -> list:
+        state["sent"] = state.get("sent", 0) + len(pcm)
+        return [pcm]
+
+    def flush_audio(self, state: dict) -> list:
+        rate = int(state.get("rate") or 16000)
+        need = int(self.MIN_SECONDS * rate) * 2  # pcm_s16le mono
+        short = need - state.get("sent", 0)
+        if state.get("sent", 0) == 0 or short <= 0:
+            return []
+        state["sent"] = need
+        return [b"\x00" * short]
 
     def end_message(self) -> Optional[str]:
         return json.dumps({"type": "finalize"})
