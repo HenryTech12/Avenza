@@ -301,3 +301,12 @@ Built from the *Sandbox Participant Platform Guide* v1.0. 505 tests pass
   (limit still 500m). Test: `tests/test_forge_manifest.py`.
 - Slow or flaky connection to the cluster API: `kubectl set image deployment/app app=<image>` is the
   smallest deploy (secrets first with `kubectl apply --validate=false`).
+
+## 11 Nov: replies cutting each other off (phone, cluster)
+
+- A reply could be cut mid-sentence and another one start. Causes: the microphone stayed open when
+  Avenza began speaking (so it could hear its own voice and send it as an utterance), and results
+  and "unclear" errors called `player.stop()`, cutting the server's reply in progress.
+- Now the microphone closes the moment Avenza starts speaking (unless the customer is mid-sentence),
+  and with live server voices nothing cuts a reply except the customer's own action.
+  `frontend/src/session/speechPolicy.ts`, tests in `speechPolicy.test.ts`.
