@@ -115,7 +115,7 @@ spec:
             periodSeconds: 20
             failureThreshold: 3
           resources:
-            requests: { cpu: 150m, memory: 256Mi }
+            requests: { cpu: 50m, memory: 256Mi }   # 11 Nov: 150m hit team-quota (400m) during a rollout
             limits: { cpu: 500m, memory: 512Mi }
           volumeMounts:
             - name: data
