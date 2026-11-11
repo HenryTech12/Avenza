@@ -11,6 +11,7 @@ from avenza_ai.types import NotConfigured, ProviderError, UnsupportedLanguage
 
 run = asyncio.run
 PCM = b"\x01\x00" * 3200
+YARN_MIN_BYTES = int(2.1 * 16000) * 2  # YarnGPT needs 2 s; shorter streams are padded
 
 
 def test_mock_stt_returns_text_and_timing():
@@ -197,7 +198,7 @@ def test_yarngpt_asr_stream_against_a_documented_server():
     res = run(main())
     assert res.text == "send five thousand naira to GTBank"
     assert seen["auth"] == "Bearer sk_test" and seen["path"] == "/api/v1/asr/stream"
-    assert seen["start"]["audio"]["sample_rate"] == 16000 and seen["audio"] == len(PCM)
+    assert seen["start"]["audio"]["sample_rate"] == 16000 and seen["audio"] == YARN_MIN_BYTES  # padded with silence to YarnGPT's 2 s minimum
 
 
 def _intron_server(seen, *, refuse=False, early_commit=None):
@@ -356,7 +357,7 @@ def test_sahara_refusal_falls_back_to_the_next_provider():
 
     res = run(main())
     assert res.text == "send five thousand naira" and res.provider == "ai:yarngpt"
-    assert seen_yarn["audio"] == len(PCM)  # every frame, including those before the switch
+    assert seen_yarn["audio"] == YARN_MIN_BYTES  # every frame, including those before the switch, padded to 2 s
 
 
 # ---- audio helpers --------------------------------------------------------------------
@@ -557,3 +558,19 @@ def test_yarngpt_tts_route_from_env(monkeypatch):
     assert YarnGPTTTS(api_key="k").route == "ticket"
     monkeypatch.setenv("YARNGPT_TTS_ROUTE", "bogus")
     assert YarnGPTTTS(api_key="k").route == "conversation"
+
+
+def test_yarngpt_asr_pads_short_audio_to_the_two_second_minimum():
+    """A spoken account number can be under 2 s; YarnGPT answers INPUT_TOO_SHORT for that."""
+    p = YarnGPTSTTProvider(url="wss://x.test/api/v1/asr/stream", api_key="k")
+    state = {"rate": 16000}
+    p.frame_audio(state, bytes(2 * 16000 * 1))  # 1.0 s of audio
+    pad = p.flush_audio(state)
+    assert len(pad) == 1
+    assert (1 * 16000 + len(pad[0]) // 2) / 16000 >= 2.0
+    assert set(pad[0]) == {0}  # silence only
+    # long enough already: nothing added; empty stream: nothing added
+    long_state = {"rate": 16000}
+    p.frame_audio(long_state, bytes(2 * 16000 * 3))
+    assert p.flush_audio(long_state) == []
+    assert p.flush_audio({"rate": 16000}) == []

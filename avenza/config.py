@@ -37,6 +37,12 @@ def _float(name: str, default: float) -> float:
         return default
 
 
+def _ten_digits(value: str) -> str:
+    """An account number is exactly ten digits; anything else switches the setting off."""
+    digits = "".join(ch for ch in value if ch.isdigit())
+    return digits if len(digits) == 10 else ""
+
+
 @dataclass(frozen=True)
 class Settings:
     app_name: str = "Avenza"
@@ -135,6 +141,11 @@ class Settings:
     language_detection: bool = False
     switch_languages: str = "en,ha,ig,yo"
     beta_languages: str = "ha,ig,yo"
+    # Log each heard phrase and Avenza's reply (for local testing only: it records speech content).
+    log_transcripts: bool = False
+    # Demo convenience (synthetic data only): when no usable account number is heard, send to this one.
+    # The bank-verified name is still read back and the fingerprint is still required. Empty = off.
+    demo_default_account: str = ""
     # Synthesise every fixed prompt once at startup so only read-backs wait for TTS.
     tts_prewarm: bool = True
     tts_prewarm_languages: str = "en"
@@ -287,6 +298,8 @@ def load_settings() -> Settings:
         beta_languages=os.getenv("BETA_LANGUAGES", "ha,ig,yo"),
         tts_prewarm=_bool("TTS_PREWARM", True),
         tts_prewarm_languages=os.getenv("TTS_PREWARM_LANGUAGES", "en"),
+        log_transcripts=_bool("LOG_TRANSCRIPTS", False),
+        demo_default_account=_ten_digits(os.getenv("DEMO_DEFAULT_ACCOUNT", "")),
         tts_prewarm_concurrency=_int("TTS_PREWARM_CONCURRENCY", 2),
         tts_prewarm_timeout_s=_float("TTS_PREWARM_TIMEOUT_S", 30.0),
         tts_cache_dir=os.getenv("TTS_CACHE_DIR", "data/tts-cache").strip(),

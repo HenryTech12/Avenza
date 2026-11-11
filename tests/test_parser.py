@@ -275,3 +275,42 @@ def test_amount_to_words():
     assert amount_to_words(150000) == "one thousand five hundred naira"
     assert amount_to_words(50) == "fifty kobo"
     assert amount_to_words(1234) == "twelve naira and thirty-four kobo"
+
+
+@pytest.mark.parametrize(
+    "spoken",
+    [
+        "zero one two three nine eight seven zero zero one.",
+        "Zero, one, two, three, nine, eight, seven, zero, zero, one.",
+        "0 1 2 3 9 8 7 0 0 1",
+        "0123 987 001",
+        "oh one two three nine eight seven oh oh one",
+    ],
+)
+def test_account_number_spoken_with_punctuation_or_grouped_digits(spoken):
+    account = parse_account_number(spoken)
+    assert account is not None and account.value == "0123987001"
+    # the digits are an account, never an amount
+    assert extract_transfer_fields(spoken).amount is None
+    assert extract_transfer_fields(spoken).amount_error == "missing_amount"
+
+
+def test_a_spaced_out_amount_is_not_an_account_number():
+    assert parse_account_number("send 5 000 000 000 naira") is None
+
+
+@pytest.mark.parametrize(
+    "heard",
+    [
+        "di amount is 5000 naira to gtbank 012398701",  # nine of ten digits heard
+        "di amount is 5000 naira to gtbank 012398701 \u130b\u12da\u12eb",  # plus stray characters
+        "send 5000 naira to gtbank 01239870",
+        "send 5000 naira to gtbank 123987001",  # the leading zero dropped
+    ],
+)
+def test_a_partial_account_number_is_not_a_second_amount(heard):
+    fields = extract_transfer_fields(heard)
+    assert fields.amount is not None and fields.amount.kobo == 500_000
+    assert fields.amount_error is None
+    assert fields.account is None
+    assert fields.bank is not None
