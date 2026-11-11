@@ -4,6 +4,13 @@
   align-items: center;
   gap: 4px;
   text-align: center;
+  width: 100%;
+  padding: var(--space-3) var(--space-2);
+  border-radius: var(--radius-card);
+  background: var(--hero-bg);
+  border: var(--border-width) solid var(--hero-border);
+  color: var(--hero-text);
+  box-shadow: var(--card-shadow);
 }
 .amount {
   font-size: var(--fs-amount);
@@ -12,9 +19,12 @@
   letter-spacing: -0.02em;
 }
 .words {
-  color: var(--text-muted);
+  color: var(--hero-muted);
   font-size: var(--fs-body);
   text-transform: capitalize;
+}
+.compact {
+  padding: var(--space-2);
 }
 .compact .amount {
   font-size: var(--fs-sub);

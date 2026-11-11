@@ -14,6 +14,14 @@
   --simulated: #dccfff;
   --border-width: 2px;
   --shadow: none;
+  --card-bg: var(--surface);
+  --card-bg-raised: var(--surface);
+  --card-border: var(--border);
+  --card-shadow: none;
+  --hero-bg: #000000;
+  --hero-border: #ffffff;
+  --hero-chip: #000000;
+  --page-bg: none;
 }
 :root[data-contrast='high'][data-theme='light'],
 :root[data-contrast='high'][data-effective-theme='light'] {
@@ -29,4 +37,9 @@
   --warning: #7a3b00;
   --danger: #8f0000;
   --simulated: #4a14b8;
+  --hero-bg: #ffffff;
+  --hero-text: #000000;
+  --hero-muted: #000000;
+  --hero-border: #000000;
+  --hero-chip: #ffffff;
 }

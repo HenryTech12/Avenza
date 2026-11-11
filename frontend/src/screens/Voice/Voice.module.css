@@ -17,8 +17,9 @@
   border-radius: 50%;
   color: var(--text);
   text-decoration: none;
-  background: var(--surface-raised);
-  border: var(--border-width) solid var(--border);
+  background: var(--card-bg);
+  border: var(--border-width) solid var(--card-border);
+  box-shadow: var(--card-shadow);
   width: 44px;
   height: 44px;
   margin: 0;
@@ -27,8 +28,9 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: var(--space-1);
-  flex-wrap: wrap;
+  gap: 8px;
+  flex-wrap: nowrap;
+  min-width: 0;
 }
 .conn {
   display: inline-flex;
@@ -106,10 +108,10 @@
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-4) var(--space-3) var(--space-2);
-  background: var(--surface-raised);
-  border: var(--border-width) solid var(--border);
-  border-radius: 28px;
-  box-shadow: var(--shadow);
+  background: var(--card-bg-raised);
+  border: var(--border-width) solid var(--card-border);
+  border-radius: 32px;
+  box-shadow: var(--card-shadow), 0 20px 50px rgb(0 0 0 / 0.25);
 }
 .verifyKicker {
   text-transform: uppercase;
@@ -169,9 +171,10 @@
   margin: 0;
   display: flex;
   flex-direction: column;
-  background: var(--surface-raised);
-  border: var(--border-width) solid var(--border);
+  background: var(--card-bg);
+  border: var(--border-width) solid var(--card-border);
   border-radius: var(--radius-card);
+  box-shadow: var(--card-shadow);
   text-align: left;
 }
 .receipt > div {

@@ -8,9 +8,9 @@
 .icon {
   display: grid;
   place-items: center;
-  width: 52px;
-  height: 52px;
-  border-radius: 50%;
+  width: 64px;
+  height: 64px;
+  border-radius: 22px;
   border: var(--border-width) solid currentColor;
   margin-bottom: var(--space-1);
 }

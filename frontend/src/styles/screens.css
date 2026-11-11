@@ -1,13 +1,15 @@
-/* Shared page frame for every screen. */
+/* Shared page frame for every screen. Children never shrink: the page scrolls instead of clipping. */
+:root { --page-x: clamp(16px, 5vw, 28px); }
+.page > * { flex-shrink: 0; }
 .page {
   width: 100%;
   max-width: var(--max-width);
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
-  padding: calc(var(--space-3) + env(safe-area-inset-top)) calc(var(--space-3) + env(safe-area-inset-right))
-    calc(var(--space-3) + env(safe-area-inset-bottom)) calc(var(--space-3) + env(safe-area-inset-left));
-  gap: var(--space-3);
+  padding: calc(var(--space-2) + env(safe-area-inset-top)) calc(var(--page-x) + env(safe-area-inset-right))
+    calc(var(--space-3) + env(safe-area-inset-bottom)) calc(var(--page-x) + env(safe-area-inset-left));
+  gap: var(--space-2);
   animation: page-in var(--dur) var(--ease);
 }
 .page-center {
