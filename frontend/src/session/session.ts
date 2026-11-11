@@ -32,6 +32,7 @@ import type { Lang, ServerMessage } from '../protocol/messages'
 import { errorText } from './account'
 import { decodePcm } from '../protocol/wire'
 import { initialState, reduce, type MachineEvent, type MachineState } from './machine'
+import { cutsSpeech, micMayListen } from './speechPolicy'
 
 export { language, theme, highContrast, onboardingComplete, consentId, deviceToken, lastTurn, protocolLog, audioRunning }
 export { flags, vadConfig, env, languages }
@@ -303,7 +304,7 @@ function enterState(prev: MachineState, next: MachineState): void {
       break
     case 'cancelled':
       vibrate('failed')
-      player.stop()
+      if (cutsSpeech('cancelled', serverVoices())) player.stop()
       if (!serverVoices()) void playPrompt(next.cancel === 'expired' ? 'expired' : 'cancelled')
       scheduleReturn(timeouts.cancelledReturnMs)
       break
@@ -312,7 +313,7 @@ function enterState(prev: MachineState, next: MachineState): void {
 }
 
 function enterResult(s: MachineState): void {
-  player.stop()
+  if (cutsSpeech('result', serverVoices())) player.stop()
   announce(`${statusWord(s)}.`)
   if (s.result === 'settled') {
     vibrate('settled')
@@ -383,7 +384,7 @@ function wantsMic(): boolean {
 
 function syncMic(): void {
   if (streaming) return // never cut an utterance in progress
-  if (!wantsMic() || player.isSpeaking.value) {
+  if (!micMayListen(wantsMic(), player.isSpeaking.value, streaming)) {
     closeMic()
     return
   }
@@ -440,6 +441,10 @@ player.onIdle(() => {
   }
 })
 player.onSoundStart(() => markSoundStarted())
+// Close the microphone the moment Avenza starts speaking, so it never hears its own voice (11 Nov).
+player.isSpeaking.subscribe((speaking) => {
+  if (speaking) syncMic()
+})
 
 /* ------------------------------------------------------------------ utterances */
 function onSpeechStart(): void {
@@ -551,7 +556,7 @@ function onServer(msg: ServerMessage): void {
       }
       if (msg.code === 'transfers_locked') locked.value = true
       if (msg.code.startsWith('unclear')) {
-        player.stop()
+        if (cutsSpeech('unclear', serverVoices())) player.stop()
         if (!serverVoices()) void playPrompt(msg.promptId)
         announce(t('hint.unclear'))
       }
